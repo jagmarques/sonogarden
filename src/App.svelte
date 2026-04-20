@@ -1,87 +1,41 @@
 <script>
-  // Sonogarden root. Boots Magenta, loads the garden, plants starters, wires audio.
-
   import * as Tone from 'tone';
 
   import Garden from './visual/Garden.svelte';
-  import TendCard from './ui/TendCard.svelte';
-  import WelcomeOverlay from './ui/WelcomeOverlay.svelte';
+  import Bloomfield from './visual/Bloomfield.svelte';
   import MuteButton from './ui/MuteButton.svelte';
-  import FirstOpenHint from './ui/FirstOpenHint.svelte';
   import StartOverlay from './ui/StartOverlay.svelte';
 
-  import {
-    gardenState,
-    loadGardenFromDB,
-    plantSeed,
-    playSeed,
-    unplaySeed,
-    pruneSeed,
-    importGiftedSeed,
-  } from './state/store.svelte.js';
-  import { ensureStarterSeeds, STARTER_COUNT } from './state/starter.js';
+  import { gardenState, setLiveMelody, loadSavedMoments, persistSavedMoments, registerVisit, loadSessionSec, bumpSessionSec, noteMoodEntered, moodSecondsSoFar } from './state/store.svelte.js';
   import { initMagenta } from './ai/magenta.js';
-  import { setGardenState } from './persistence/db.js';
-  import { initAudio, playNoteSequence, setMuted, stopAll, playCollision, waitForVoicesLoaded, setMainVoice, setMood } from './audio/player.js';
-  import { AVAILABLE_VOICES } from './audio/voices.js';
-  import { MOODS, DEFAULT_MOOD } from './audio/moods.js';
-  import { startAutoplay, stopAutoplay, refreshAutoplay, onMoodChange } from './audio/autoplay.js';
-  import { absorbModifier, isAbsorbed } from './audio/infusion.js';
-  import { buildGiftUrl, decodeGift, validateGiftPayload } from './share/gift.js';
+  import { initAudio, setMuted, waitForVoicesLoaded, setMood, stopAll } from './audio/player.js';
+  import { MOODS, DEFAULT_MOOD, moodByHour } from './audio/moods.js';
+  import { startAutoplay, stopAutoplay, onMoodChange, playStoredMelody } from './audio/autoplay.js';
+  import { emitBloom } from './audio/events.js';
 
   const DEBUG = false;
 
   let booting = $state(true);
   let bootError = $state(null);
-  let tendSeed = $state(null);
-  let giftFlashId = $state(null);
-  let giftImportedSeedId = $state(null);
-  let giftBannerTimer = null;
-  let welcomeSummary = $state(null);
-  let firstOpen = $state(false);
-  let starterProgress = $state(0);
-  let audioUnlocked = $state(false);
-  let tuningInstruments = $state(false);
   let bootPhase = $state('magenta');
   let samplePercent = $state(0);
+  let audioUnlocked = $state(false);
+  let tuningInstruments = $state(false);
   let bootStuck = $state(false);
-  let autoplayActive = false;
   let bootStuckTimer = null;
-  let respawnTimer = null;
-  let spawnOn = $state(true);
-  let mainInstrument = $state(MOODS[DEFAULT_MOOD].instrument);
+  let autoplayActive = false;
+
   let activity = $state(DEFAULT_MOOD);
+  let shareFlash = $state(false);
+  let shareFlashTimer = null;
+  let savedExpanded = $state(false);
+  let pendingSharedMelody = null;
+  let sessionTimer = null;
+  let bloomTimer = null;
 
-  function toggleSpawn() {
-    spawnOn = !spawnOn;
-    if (spawnOn) startRespawnTimer();
-    else stopRespawnTimer();
-  }
-
-  function handleInstrumentChange(e) {
-    mainInstrument = e.target.value;
-    setMainVoice(mainInstrument);
-  }
-
-  // Switching activity reshapes BPM, reverb, voice, density, range.
-  function handleActivityChange(e) {
-    activity = e.target.value;
-    const m = setMood(activity);
-    if (m) {
-      mainInstrument = m.instrument;
-      if (typeof window !== 'undefined') window.__sonoMood = m;
-      onMoodChange();
-    }
-  }
-
-  $effect(() => {
-    const m = MOODS[activity];
-    if (typeof window !== 'undefined' && m) window.__sonoMood = m;
-  });
-
-  const seeds = $derived(gardenState.seeds);
-  const playingIds = $derived(gardenState.playingIds);
   const muted = $derived(gardenState.muted);
+  const sessionMin = $derived(Math.floor((gardenState.sessionSec || 0) / 60));
+  const moodUnlockSec = $derived(moodSecondsSoFar());
 
   function logError(context, err) {
     if (DEBUG) {
@@ -90,42 +44,22 @@
     }
   }
 
-  function playSeedAudio(seed) {
-    if (!seed || gardenState.muted) return;
-    playNoteSequence(seed.midi, {
-      seedId: seed.id,
-      scale: seed.scale,
-      form: seed.form,
-      energy: typeof seed.energy === 'number' ? seed.energy : 1,
-      onEnd: () => unplaySeed(seed.id),
-    });
-  }
-
-  function markPlayingAutoplay(seedId) {
-    if (!gardenState.playingIds.has(seedId)) {
-      const next = new Set(gardenState.playingIds);
-      next.add(seedId);
-      gardenState.playingIds = next;
-    }
-  }
-
-  function markStoppedAutoplay(seedId) {
-    if (gardenState.playingIds.has(seedId)) {
-      const next = new Set(gardenState.playingIds);
-      next.delete(seedId);
-      gardenState.playingIds = next;
-    }
+  function handleMelody(ns) {
+    setLiveMelody(ns);
   }
 
   function maybeStartAutoplay() {
-    if (autoplayActive) return;
-    if (!audioUnlocked || booting) return;
+    if (autoplayActive || !audioUnlocked || booting) return;
     autoplayActive = true;
-    startAutoplay(gardenState, {
-      getSeeds: () => gardenState.seeds,
-      markPlaying: markPlayingAutoplay,
-      markStopped: markStoppedAutoplay,
-    });
+    startAutoplay({ onMelody: handleMelody })
+      .then(() => {
+        if (pendingSharedMelody) {
+          playStoredMelody(pendingSharedMelody);
+          handleMelody(pendingSharedMelody);
+          pendingSharedMelody = null;
+        }
+      })
+      .catch((err) => logError('startAutoplay failed', err));
   }
 
   async function handleUnlock() {
@@ -135,13 +69,10 @@
     bootPhase = 'audio';
     try {
       await initAudio();
-      // Apply default mood once audio is up so BPM/reverb match.
-      const m = setMood(activity);
-      if (m) mainInstrument = m.instrument;
+      setMood(activity);
     } catch (err) {
       logError('initAudio failed', err);
     }
-    // block first autoplay on samples so seeds don't miss their first hit.
     bootPhase = 'samples';
     samplePercent = 0;
     const sampleStart = performance.now();
@@ -158,287 +89,139 @@
       samplePercent = 100;
     }
     tuningInstruments = false;
-    installCollisionHook();
-    startRespawnTimer();
     maybeStartAutoplay();
   }
 
-  // Build a short label string for a spawned modifier effect.
-  function describeEffect(e) {
-    if (!e) return '';
-    if (e.kind === 'pitch') return `pitch ${e.shift >= 0 ? '+' : ''}${e.shift}`;
-    if (e.kind === 'tone') return e.softness > 0 ? 'softer' : 'brighter';
-    if (e.kind === 'progression') return 'progression';
-    return '';
+  function handleActivityChange(e) {
+    activity = e.target.value;
+    setMood(activity);
+    stopAll();
+    noteMoodEntered();
+    onMoodChange().catch((err) => logError('onMoodChange failed', err));
   }
 
-  // Spawn a fresh modifier every ~14s up to a cap of 8.
-  function startRespawnTimer() {
-    if (respawnTimer) return;
-    respawnTimer = setInterval(() => {
-      const mods = gardenState.seeds.filter((s) => s.role === 'modifier').length;
-      if (mods >= 24) return;
-      const pool = [
-        { notes: ['C4'], scale: 'major', form: 'motif', role: 'modifier', effect: { kind: 'pitch', shift: Math.floor(Math.random() * 14) - 7 }, label: null },
-        { notes: ['A4'], scale: 'minor', form: 'motif', role: 'modifier', effect: { kind: 'tone', softness: (Math.random() < 0.5 ? 1 : -1) }, label: null },
-        { notes: ['C5', 'G4'], scale: 'major', form: 'motif', role: 'modifier', effect: { kind: 'progression', steps: [0, 7, 5, 0] }, label: null },
-      ];
-      const pick = pool[Math.floor(Math.random() * pool.length)];
-      pick.label = describeEffect(pick.effect);
-      plantSeed(pick)
-        .then(() => refreshAutoplay())
-        .catch((err) => logError('respawn plantSeed failed', err));
-    }, 2000);
+  // Variable-ratio reward: 6 to 18 minute window, classic intermittent schedule.
+  function scheduleBloomEvent() {
+    if (bloomTimer) clearTimeout(bloomTimer);
+    const minutes = 6 + Math.random() * 12;
+    bloomTimer = setTimeout(() => {
+      emitBloom();
+      scheduleBloomEvent();
+    }, minutes * 60 * 1000);
   }
 
-  function stopRespawnTimer() {
-    if (respawnTimer) {
-      clearInterval(respawnTimer);
-      respawnTimer = null;
-    }
-  }
-
-  function installCollisionHook() {
-    if (typeof window === 'undefined') return;
-    window.__sonogarden_onCollision = (idA, idB) => {
-      const a = gardenState.seeds.find((s) => s.id === idA);
-      const b = gardenState.seeds.find((s) => s.id === idB);
-      if (!a || !b) {
-        if (window.__SONO_DEBUG__) {
-          // eslint-disable-next-line no-console
-          console.log('[sonogarden.app] collision ignored: seed lookup failed', { idA, idB });
-        }
-        return;
-      }
-      playCollision(a, b);
-      // main+modifier collisions absorb the modifier into the main loop.
-      const aIsMain = a.role === 'main';
-      const bIsMain = b.role === 'main';
-      if (window.__SONO_DEBUG__) {
-        // eslint-disable-next-line no-console
-        console.log('[sonogarden.app] collision', {
-          a: { id: a.id, role: a.role },
-          b: { id: b.id, role: b.role },
-        });
-      }
-      const modifier = aIsMain && !bIsMain ? b : (bIsMain && !aIsMain ? a : null);
-      if (modifier && !isAbsorbed(modifier.id)) {
-        absorbModifier(modifier);
-        // Publish a flash event for Garden.svelte to render big feedback on main.
-        if (typeof window !== 'undefined') {
-          window.__sonoAbsorbFlash = {
-            label: modifier.label || describeEffect(modifier.effect) || 'absorbed',
-            born: performance.now(),
-          };
-        }
-        // Consume the modifier so it disappears after being added.
-        pruneSeed(modifier.id).catch((err) => logError('absorb prune failed', err));
-      }
+  function compactMelody(ns) {
+    if (!ns || !Array.isArray(ns.notes)) return null;
+    return {
+      n: ns.notes.map((x) => [x.pitch, x.startTime ?? 0, x.endTime ?? 0, x.velocity ?? 80]),
+      t: ns.totalTime ?? 0,
+      q: (ns.tempos && ns.tempos[0] && ns.tempos[0].qpm) || 120,
     };
   }
 
-  function uninstallCollisionHook() {
+  function expandMelody(c) {
+    if (!c || !Array.isArray(c.n)) return null;
+    return {
+      notes: c.n.map((a) => ({ pitch: a[0], startTime: a[1], endTime: a[2], velocity: a[3] })),
+      totalTime: c.t,
+      tempos: [{ time: 0, qpm: c.q || 120 }],
+    };
+  }
+
+  function encodeShareState(mood, ns) {
+    const payload = { m: mood, ns: compactMelody(ns) };
+    return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  }
+
+  function decodeShareState(str) {
+    try {
+      const json = decodeURIComponent(escape(atob(str)));
+      const obj = JSON.parse(json);
+      if (!obj || typeof obj !== 'object') return null;
+      return { mood: obj.m, ns: expandMelody(obj.ns) };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function handleShare() {
+    const encoded = encodeShareState(activity, gardenState.liveMelody);
+    try {
+      const url = new URL(location.href);
+      url.searchParams.set('s', encoded);
+      history.replaceState(null, '', url.toString());
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url.toString());
+    } catch (err) {
+      logError('share failed', err);
+    }
+    shareFlash = true;
+    if (shareFlashTimer) clearTimeout(shareFlashTimer);
+    shareFlashTimer = setTimeout(() => { shareFlash = false; shareFlashTimer = null; }, 2000);
+  }
+
+  function handleSaveMoment() {
+    if (!gardenState.liveMelody) return;
+    const title = (typeof window !== 'undefined' && window.prompt) ? window.prompt('name this moment') : '';
+    if (!title || !title.trim()) return;
+    const moment = {
+      title: title.trim(),
+      mood: activity,
+      ts: Date.now(),
+      liveMelody: compactMelody(gardenState.liveMelody),
+    };
+    gardenState.savedMoments = [...gardenState.savedMoments, moment];
+    persistSavedMoments();
+    gardenState.saveFlash = true;
+    setTimeout(() => { gardenState.saveFlash = false; }, 1400);
+    emitBloom();
+  }
+
+  function handleLoadMoment(idx) {
+    const m = gardenState.savedMoments[idx];
+    if (!m) return;
+    activity = m.mood;
+    setMood(activity);
+    stopAll();
+    const ns = expandMelody(m.liveMelody);
+    if (ns) {
+      playStoredMelody(ns);
+      handleMelody(ns);
+    } else {
+      onMoodChange().catch((err) => logError('load moment mood change failed', err));
+    }
+  }
+
+  function handleDeleteMoment(idx) {
+    gardenState.savedMoments = gardenState.savedMoments.filter((_, i) => i !== idx);
+    persistSavedMoments();
+  }
+
+  function processShareParam() {
     if (typeof window === 'undefined') return;
-    if (window.__sonogarden_onCollision) {
-      try { delete window.__sonogarden_onCollision; } catch (_) { window.__sonogarden_onCollision = null; }
+    const url = new URL(location.href);
+    const encoded = url.searchParams.get('s');
+    if (!encoded) return;
+    const decoded = decodeShareState(encoded);
+    if (!decoded) return;
+    if (typeof decoded.mood === 'string' && MOODS[decoded.mood]) {
+      activity = decoded.mood;
     }
-  }
-
-  async function boot() {
-    bootPhase = 'magenta';
-    try {
-      await initMagenta();
-    } catch (err) {
-      logError('initMagenta failed', err);
-      bootError = err?.message || 'Audio engine unavailable';
-      booting = false;
-      return;
-    }
-
-    try {
-      bootPhase = 'db';
-      const seedsBefore = [...gardenState.seeds];
-      await loadGardenFromDB();
-
-      if (gardenState.seeds.length === 0) {
-        firstOpen = true;
-        starterProgress = 0;
-        bootPhase = 'starters';
-        await ensureStarterSeeds(gardenState, (i) => { starterProgress = i; });
-      } else if (!gardenState.seeds.some((s) => s?.role === 'main')) {
-        // Safety net: loaded seeds but no main - plant one.
-        firstOpen = true;
-        starterProgress = 0;
-        bootPhase = 'starters';
-        await plantSeed({ notes: ['C4','E4','G4','A4','G4','F4','E4','D4','C4'], scale: 'major', form: 'riff', role: 'main' }).catch(() => {});
-      } else if (seedsBefore.length === 0 && gardenState.__lastSummary) {
-        const s = gardenState.__lastSummary;
-        if (s.mutations + s.births + s.decays > 0) {
-          welcomeSummary = { ...s, changes: [] };
-        }
-      }
-
-      await processGiftHash();
-    } catch (err) {
-      logError('loadGardenFromDB failed', err);
-      bootError = err?.message || 'Garden failed to load';
-    } finally {
-      booting = false;
-      maybeStartAutoplay();
-    }
-  }
-
-  function reloadPage() {
-    try { window.location.reload(); } catch (_) { /* ignore */ }
-  }
-
-  async function processGiftHash() {
-    const hash = typeof window !== 'undefined' ? window.location.hash : '';
-    if (!hash || !hash.startsWith('#gift=')) return;
-    const encoded = hash.slice('#gift='.length);
-    const payload = decodeGift(encoded);
-    try {
-      if (!payload || !validateGiftPayload(payload)) {
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-        return;
-      }
-      const seed = await importGiftedSeed(payload);
-      history.replaceState(null, '', window.location.pathname + window.location.search);
-      if (seed) {
-        giftImportedSeedId = seed.id;
-        if (giftBannerTimer) clearTimeout(giftBannerTimer);
-        giftBannerTimer = setTimeout(() => {
-          giftImportedSeedId = null;
-          giftBannerTimer = null;
-        }, 4000);
-      }
-    } catch (err) {
-      logError('gift import failed', err);
-      try {
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-      } catch (_) {
-        // ignore
-      }
-    }
-  }
-
-  function dismissGiftBanner() {
-    if (giftBannerTimer) {
-      clearTimeout(giftBannerTimer);
-      giftBannerTimer = null;
-    }
-    giftImportedSeedId = null;
-  }
-
-  function handleSeedClick(seedId) {
-    const seed = gardenState.seeds.find((s) => s.id === seedId);
-    if (!seed) return;
-    tendSeed = seed;
-
-    // Play immediately on click so the user hears the seed on first interaction.
-    if (!gardenState.muted) {
-      const next = new Set(gardenState.playingIds);
-      next.add(seed.id);
-      gardenState.playingIds = next;
-      playSeedAudio(seed);
-    }
-  }
-
-  function handleTendPlay() {
-    if (!tendSeed) return;
-    const seed = tendSeed;
-    const midi = playSeed(seed.id);
-    if (midi && !gardenState.muted) {
-      playNoteSequence(midi, {
-        seedId: seed.id,
-        scale: seed.scale,
-        form: seed.form,
-        energy: typeof seed.energy === 'number' ? seed.energy : 1,
-        onEnd: () => unplaySeed(seed.id),
-      });
-    } else if (midi && gardenState.muted) {
-      unplaySeed(seed.id);
-    }
-  }
-
-  function handleTendPrune() {
-    if (!tendSeed) return;
-    if (tendSeed.role === 'main') return;
-    const id = tendSeed.id;
-    tendSeed = null;
-    pruneSeed(id)
-      .then(() => refreshAutoplay())
-      .catch((err) => logError('pruneSeed failed', err));
-  }
-
-  async function handleTendGift() {
-    if (!tendSeed) return;
-    try {
-      const url = buildGiftUrl(tendSeed);
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      }
-      const flashId = tendSeed.id;
-      giftFlashId = flashId;
-      setTimeout(() => {
-        if (giftFlashId === flashId) giftFlashId = null;
-      }, 1600);
-    } catch (err) {
-      logError('gift copy failed', err);
-    }
-  }
-
-  function handleTendParent(parentId) {
-    const parent = gardenState.seeds.find((s) => s.id === parentId);
-    if (parent) tendSeed = parent;
-  }
-
-  function handleTendClose() {
-    tendSeed = null;
-  }
-
-  function handleWelcomeClose() {
-    welcomeSummary = null;
-  }
-
-  function handleFirstOpenDismiss() {
-    firstOpen = false;
+    if (decoded.ns) pendingSharedMelody = decoded.ns;
   }
 
   function handleMuteChange(next) {
     gardenState.muted = next;
-    // Don't kill loops on mute; just silence Destination so unmute is instant.
     setMuted(next);
   }
 
-  function handleGlobalKeydown(e) {
-    if (e.key !== 'Escape') return;
-    let handled = false;
-    if (tendSeed) { tendSeed = null; handled = true; }
-    if (welcomeSummary) { welcomeSummary = null; handled = true; }
-    if (handled) e.preventDefault();
-  }
-
   function handleBeforeUnload() {
-    try {
-      setGardenState({ lastOpened: Date.now(), version: 'v1' });
-    } catch (err) {
-      logError('setGardenState on unload failed', err);
-    }
-    try {
-      stopAutoplay();
-      stopAll();
-    } catch (_) {
-      /* ignore */
-    }
-    uninstallCollisionHook();
-    stopRespawnTimer();
+    try { stopAutoplay(); stopAll(); } catch (_) { /* ignore */ }
+    if (sessionTimer) { clearInterval(sessionTimer); sessionTimer = null; }
+    if (bloomTimer) { clearTimeout(bloomTimer); bloomTimer = null; }
   }
 
-  // iOS Safari suspends AudioContext on hide; resume explicitly on return.
   function handleVisibilityChange() {
-    if (typeof document === 'undefined') return;
-    if (document.visibilityState !== 'visible') return;
+    if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
     if (!audioUnlocked) return;
     try {
       const ctx = Tone.getContext();
@@ -453,6 +236,36 @@
     }
   }
 
+  async function boot() {
+    bootPhase = 'magenta';
+    try {
+      await initMagenta();
+    } catch (err) {
+      logError('initMagenta failed', err);
+      bootError = err?.message || 'Audio engine unavailable';
+      booting = false;
+      return;
+    }
+    loadSavedMoments();
+    processShareParam();
+    loadSessionSec();
+    registerVisit();
+    // First-open time-of-day mood pick, but only if the URL didn't set one via share.
+    const hadShare = typeof window !== 'undefined' && new URL(location.href).searchParams.has('s');
+    if (!hadShare) activity = moodByHour(new Date().getHours());
+    setMood(activity);
+    noteMoodEntered();
+    booting = false;
+    maybeStartAutoplay();
+    if (sessionTimer) clearInterval(sessionTimer);
+    sessionTimer = setInterval(() => { if (audioUnlocked) bumpSessionSec(5); }, 5000);
+    scheduleBloomEvent();
+  }
+
+  function reloadPage() {
+    try { window.location.reload(); } catch (_) { /* ignore */ }
+  }
+
   $effect(() => {
     boot();
     bootStuckTimer = setTimeout(() => {
@@ -465,15 +278,11 @@
   });
 
   $effect(() => {
-    window.addEventListener('keydown', handleGlobalKeydown);
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('keydown', handleGlobalKeydown);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      uninstallCollisionHook();
-      stopRespawnTimer();
     };
   });
 </script>
@@ -486,15 +295,7 @@
 
 {#if booting}
   <div class="loading" role="status" aria-live="polite">
-    {#if bootPhase === 'magenta'}
-      <span>loading AI model...</span>
-    {:else if bootPhase === 'db'}
-      <span>reading garden...</span>
-    {:else if bootPhase === 'starters'}
-      <span>growing... {starterProgress}/{STARTER_COUNT}</span>
-    {:else}
-      <span>loading...</span>
-    {/if}
+    <span>loading AI model...</span>
     {#if bootStuck}
       <div class="stuck">
         <p>still loading... if stuck, reload the page (cmd+shift+R)</p>
@@ -503,11 +304,8 @@
     {/if}
   </div>
 {:else}
-  <Garden
-    seeds={seeds}
-    playingIds={playingIds}
-    onseedClick={handleSeedClick}
-  />
+  <Garden />
+  <Bloomfield mood={MOODS[activity]} />
 
   {#if !audioUnlocked || tuningInstruments}
     <StartOverlay
@@ -520,58 +318,45 @@
     />
   {/if}
 
-  {#if firstOpen && audioUnlocked}
-    <FirstOpenHint visible={firstOpen} ondismiss={handleFirstOpenDismiss} />
-  {/if}
-
-  {#if welcomeSummary}
-    <WelcomeOverlay
-      mutations={welcomeSummary.mutations}
-      births={welcomeSummary.births}
-      decays={welcomeSummary.decays}
-      changes={welcomeSummary.changes ?? []}
-      onclose={handleWelcomeClose}
-    />
-  {/if}
-
-  {#if giftFlashId}
-    <div class="gift-flash" role="status" aria-live="polite">link copied</div>
-  {/if}
-
-  {#if giftImportedSeedId}
-    <button
-      type="button"
-      class="gift-banner"
-      aria-live="polite"
-      onclick={dismissGiftBanner}
-    >
-      a gift was planted in your garden
-    </button>
-  {/if}
-
-  {#if tendSeed}
-    <TendCard
-      seed={tendSeed}
-      onclose={handleTendClose}
-      onplay={handleTendPlay}
-      onprune={handleTendPrune}
-      ongift={handleTendGift}
-      onparent={handleTendParent}
-    />
-  {/if}
-
   <MuteButton muted={muted} onchange={handleMuteChange} />
 
+  <div class="hud">
+    <span class="hud-item">{sessionMin}m</span>
+    <span class="hud-item">streak {gardenState.streak}</span>
+    <span class="hud-item">moments {gardenState.savedMoments.length}</span>
+  </div>
+
+  {#if gardenState.saveFlash}
+    <div class="save-flash" role="status" aria-live="polite">moment saved</div>
+  {/if}
+
   <div class="control-bar">
-    <select class="activity-select" aria-label="Activity" value={activity} onchange={handleActivityChange} title={MOODS[activity]?.evidence ?? ''}>
+    <select class="activity-select" aria-label="Activity" value={activity} onchange={handleActivityChange} title={MOODS[activity]?.citation ?? ''}>
       {#each Object.keys(MOODS) as key}
         <option value={key}>{MOODS[key].label}</option>
       {/each}
     </select>
-    <button type="button" class="spawn-toggle" onclick={toggleSpawn} aria-pressed={spawnOn}>
-      {spawnOn ? 'stop spawning' : 'start spawning'}
-    </button>
-    <span class="activity-evidence">{MOODS[activity]?.evidence ?? ''}</span>
+    <span class="mood-evidence">{MOODS[activity]?.citation ?? ''}</span>
+    <button type="button" class="spawn-toggle" onclick={handleSaveMoment}>save this moment</button>
+    <button type="button" class="spawn-toggle" onclick={handleShare}>share</button>
+    {#if shareFlash}
+      <span class="share-flash" role="status" aria-live="polite">link copied</span>
+    {/if}
+    {#if gardenState.savedMoments.length > 0}
+      <button type="button" class="spawn-toggle" onclick={() => (savedExpanded = !savedExpanded)} aria-expanded={savedExpanded}>
+        saved {savedExpanded ? 'hide' : 'show'} ({gardenState.savedMoments.length})
+      </button>
+    {/if}
+    {#if savedExpanded && gardenState.savedMoments.length > 0}
+      <ul class="saved-list" aria-label="saved moments">
+        {#each gardenState.savedMoments as m, i (m.ts)}
+          <li class="saved-item">
+            <button type="button" class="saved-title" onclick={() => handleLoadMoment(i)}>{m.title}</button>
+            <button type="button" class="saved-del" aria-label="delete" onclick={() => handleDeleteMoment(i)}>×</button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </div>
 {/if}
 
@@ -623,7 +408,6 @@
     border-color: var(--iris);
     color: var(--pollen);
   }
-
   .error-banner {
     position: fixed;
     top: 0;
@@ -639,11 +423,63 @@
     text-align: center;
     z-index: 70;
   }
-
-  .error-text {
-    color: var(--pollen);
+  .error-text { color: var(--pollen); }
+  .hud {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    display: flex;
+    gap: 12px;
+    z-index: 55;
+    font-family: var(--font);
+    font-size: 12px;
+    color: color-mix(in srgb, var(--iris) 70%, transparent);
+    pointer-events: none;
   }
-
+  .hud-item {
+    padding: 4px 10px;
+    background: color-mix(in srgb, #14191C 70%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 70%, transparent);
+    border-radius: 9999px;
+    letter-spacing: 0.02em;
+  }
+  .save-flash {
+    position: fixed;
+    left: 50%;
+    top: 32%;
+    transform: translateX(-50%);
+    padding: 10px 18px;
+    font-family: var(--font);
+    font-size: 14px;
+    color: var(--pollen);
+    background: color-mix(in srgb, var(--loam) 80%, transparent);
+    border: 1px solid color-mix(in srgb, var(--iris) 60%, transparent);
+    border-radius: 9999px;
+    z-index: 60;
+    animation: save-pop 1400ms ease-out both;
+  }
+  @keyframes save-pop {
+    0% { opacity: 0; transform: translate(-50%, -4px) scale(0.96); }
+    20% { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
+    60% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -6px) scale(1); }
+  }
+  .mood-evidence {
+    font-family: var(--font);
+    font-size: 10px;
+    color: color-mix(in srgb, var(--iris) 55%, transparent);
+    text-align: right;
+    padding: 0 6px;
+    max-width: 260px;
+    line-height: 1.3;
+    opacity: 0;
+    transition: opacity 160ms ease-out;
+    pointer-events: none;
+  }
+  .control-bar:hover .mood-evidence,
+  .control-bar:focus-within .mood-evidence {
+    opacity: 1;
+  }
   .control-bar {
     position: fixed;
     right: 16px;
@@ -688,67 +524,62 @@
     color: var(--iris);
     border-color: var(--iris);
   }
-  .mood-symbol {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 320px;
-    line-height: 1;
-    opacity: 0.08;
-    pointer-events: none;
-    z-index: 1;
-    transition: opacity 600ms ease, color 600ms ease;
+  .share-flash {
     font-family: var(--font);
-  }
-  .activity-evidence {
-    font-family: var(--font);
-    font-size: 10px;
-    color: color-mix(in srgb, var(--iris) 55%, transparent);
+    font-size: 12px;
+    color: var(--pollen);
     text-align: right;
     padding: 0 6px;
-    opacity: 0;
-    transition: opacity 160ms ease-out;
-    pointer-events: none;
-    line-height: 1.3;
   }
-  .control-bar:hover .activity-evidence,
-  .control-bar:focus-within .activity-evidence {
-    opacity: 1;
+  .saved-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 260px;
+    max-height: 220px;
+    overflow-y: auto;
   }
-
-  .gift-banner {
-    position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 8px 14px;
-    background: color-mix(in srgb, var(--loam) 90%, transparent);
-    border: 1px solid var(--moss);
-    color: var(--petal);
+  .saved-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #14191C;
+    border: 1px solid #2A3A33;
+    border-radius: 9999px;
+    padding: 2px 6px 2px 10px;
+  }
+  .saved-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    color: #E8C9A0;
     font-family: var(--font);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    z-index: 55;
-    border-radius: 3px;
     cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .gift-banner:hover,
-  .gift-banner:focus-visible {
-    color: var(--pollen);
-  }
-
-  .gift-flash {
-    position: fixed;
-    bottom: 72px;
-    right: 16px;
-    padding: 6px 10px;
-    background: color-mix(in srgb, var(--loam) 90%, transparent);
-    border: 1px solid var(--moss);
-    color: var(--pollen);
+  .saved-title:hover,
+  .saved-title:focus-visible { color: var(--iris); }
+  .saved-del {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: 0;
+    color: color-mix(in srgb, var(--iris) 70%, transparent);
     font-family: var(--font);
-    font-size: 13px;
-    z-index: 55;
-    border-radius: 3px;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 9999px;
   }
+  .saved-del:hover,
+  .saved-del:focus-visible { color: var(--pollen); }
 </style>

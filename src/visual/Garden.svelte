@@ -2,11 +2,9 @@
   import p5 from 'p5';
   import { colorForKey, PALETTE, mixRgb } from './colors.js';
   import { updateSeedPosition } from '../state/store.svelte.js';
-  import { infusion } from '../audio/infusion.js';
 
   const DEBUG = false;
 
-  // Props (Svelte 5). Contract preserved from Cycle 8.
   let { seeds = [], playingIds = new Set(), onseedClick = () => {} } = $props();
 
   let hostEl;
@@ -14,7 +12,7 @@
   let p5Instance = null;
   let reducedMotion = false;
 
-  // Mirror of props for the p5 closure (p5 reads each frame, not via runes).
+  // p5 reads this every frame, not via runes.
   const state = {
     seeds: [],
     playingIds: new Set(),
@@ -25,19 +23,19 @@
     cursorX: -9999,
     cursorY: -9999,
     cursorActive: false,
-    dragTrail: [],            // recent drag positions for trail
-    worms: new Map(),         // seedId -> {head,vel,target,wander,segments,speed,lastPlayStart,nextTargetAt}
-    collisions: new Map(),    // pairKey -> lastTime (cooldown registry)
-    bursts: [],               // {x, y, born, max, col, particles: [{vx,vy}]}
-    rings: [],                // {x, y, born, max, col}
-    playPulses: [],           // {x, y, born, max, col} radiating rings from playing head
-    flashHeads: new Map(),    // seedId -> msUntil (head-glow boost window)
+    dragTrail: [],
+    worms: new Map(),
+    collisions: new Map(),
+    bursts: [],
+    rings: [],
+    playPulses: [],
+    flashHeads: new Map(),
     sceneSeed: 0,
     frame: 0,
     lastFrameTime: 0,
   };
 
-  // Drag state: not $state; p5 polls.
+  // Not $state; p5 polls each frame.
   const drag = {
     id: null,
     startX: 0,
@@ -62,7 +60,6 @@
     syncWorms();
   });
 
-  // --- deterministic helpers ---
   function hashToUnit(str, salt = 0) {
     let h = (2166136261 ^ salt) >>> 0;
     const s = String(str);
@@ -73,7 +70,6 @@
     return (h % 100000) / 100000;
   }
 
-  // Seed position (normalized 0..1) -> canvas pixels.
   function seedInitialPos(seed) {
     const w = state.width;
     const h = state.height;
@@ -88,24 +84,20 @@
   function headRadiusFor(seed) {
     const e = typeof seed.energy === 'number' ? seed.energy : 1;
     const clamped = Math.max(0, Math.min(1, e));
-    // Main is ~2x modifier size.
     if (seed.role === 'main') return 90 + clamped * 40;
     return 16 + clamped * 6;
   }
 
   function wormSpeedFor(seed) {
-    // Main drifts slower so it feels weighty. Modifiers stay 25..50 px/s.
     const k = hashToUnit(seed.id, 3);
     if (seed.role === 'main') return 18 + k * 18;
     return 25 + k * 25;
   }
 
   function segmentCountFor(seed) {
-    // Main has a long tail so it reads as the conductor.
     return seed.role === 'main' ? 24 : 12;
   }
 
-  // --- worm lifecycle: keep state.worms in sync with state.seeds ---
   function syncWorms() {
     if (!state.width || !state.height) return;
     const seen = new Set();
@@ -130,8 +122,7 @@
     const segCount = segmentCountFor(seed);
     const gap = 10;
     const segments = new Array(segCount);
-    // Spread segments behind the head in a visible trail so the worm reads as
-    // a worm on frame 1, not a pile of circles stacked on the head.
+    // Spread segments behind head so worm reads as a worm on frame 1, not stacked circles.
     const dx = -Math.cos(ang) * gap;
     const dy = -Math.sin(ang) * gap;
     for (let i = 0; i < segCount; i++) {
@@ -159,7 +150,6 @@
     };
   }
 
-  // --- p5 sketch ---
   function sketch(p) {
     p.setup = () => {
       const rect = hostEl.getBoundingClientRect();
@@ -186,10 +176,8 @@
       const dt = Math.max(0, Math.min(0.05, (now - state.lastFrameTime) / 1000));
       state.lastFrameTime = now;
 
-      // 1. Background (flat gradient only, no stars, no grid, no beat flash).
       drawBackground(p);
 
-      // 2. Update worms.
       const ordered = state.seeds.filter((s) => s && s.id);
       for (const seed of ordered) {
         const worm = state.worms.get(seed.id);
@@ -197,17 +185,15 @@
         stepWorm(worm, seed, now, dt);
       }
 
-      // 3. Collisions (head-to-head) - visual only.
       if (!reducedMotion) detectCollisions(now);
       cleanupCollisions(now);
 
-      // 4. Draw worms (bodies behind, heads in front).
       for (const seed of ordered) {
         const worm = state.worms.get(seed.id);
         if (!worm) continue;
         drawWormBody(p, worm, seed, now);
       }
-      // Draw non-main heads first; main renders LAST so it sits on top.
+      // Main renders LAST so it sits on top of modifier heads.
       const mainFirst = ordered.filter((s) => s.role !== 'main').concat(ordered.filter((s) => s.role === 'main'));
       for (const seed of mainFirst) {
         const worm = state.worms.get(seed.id);
@@ -215,16 +201,13 @@
         drawWormHead(p, worm, seed, now);
       }
 
-      // 5. Effects (bursts, rings, pulses, infusion stream).
       updateAndDrawRings(p, now);
       updateAndDrawPlayPulses(p, now);
       updateAndDrawBursts(p, now);
       drawInfusionStream(p, now);
 
-      // 6. Drag trail only (no cursor aura, no labels).
       updateAndDrawDragTrail(p, now);
 
-      // 7. Absorb flash: bright ring + label at main when a modifier is absorbed.
       try {
         const flash = window.__sonoAbsorbFlash;
         if (flash && now - flash.born < 1800) {
@@ -254,7 +237,6 @@
     };
   }
 
-  // --- background: static navy-to-black gradient ---
   function hexToRgb(h) {
     const s = String(h || '').replace('#', '');
     const n = parseInt(s.length === 3 ? s.split('').map(c => c + c).join('') : s, 16);
@@ -279,9 +261,8 @@
     p.noStroke();
   }
 
-  // --- worm physics: steer + wander + bounce ---
   function stepWorm(worm, seed, now, dt) {
-    // Main worm is anchored to canvas center; no movement.
+    // Main is anchored to canvas center; no movement.
     if (seed.role === 'main') {
       worm.head.x = state.width / 2;
       worm.head.y = state.height / 2;
@@ -290,7 +271,7 @@
       pushSegments(worm);
       return;
     }
-    // Drag freeze: head tracks cursor, velocity zero, movement resumes on release.
+    // Drag freeze: head tracks cursor; release resumes movement.
     if (drag.id === seed.id) {
       worm.head.x = state.cursorX;
       worm.head.y = state.cursorY;
@@ -300,7 +281,6 @@
       return;
     }
 
-    // Refresh target every 4-8s.
     if (now >= worm.nextTargetAt) {
       worm.target = pickRandomTarget();
       worm.nextTargetAt = now + 4000 + Math.random() * 4000;
@@ -308,7 +288,6 @@
 
     const rmScale = reducedMotion ? 0.3 : 1.0;
 
-    // Steering toward target (weak).
     const dx = worm.target.tx - worm.head.x;
     const dy = worm.target.ty - worm.head.y;
     const d2 = dx * dx + dy * dy;
@@ -319,13 +298,11 @@
     worm.vel.vx += ax * dt;
     worm.vel.vy += ay * dt;
 
-    // Wander: small rotating offset injected into heading.
     worm.wander += (Math.random() - 0.5) * 2.0 * dt;
     const wanderForce = 9;
     worm.vel.vx += Math.cos(worm.wander) * wanderForce * dt;
     worm.vel.vy += Math.sin(worm.wander) * wanderForce * dt;
 
-    // Clamp speed to worm.speed * (0.7..1.3).
     const spd = Math.sqrt(worm.vel.vx * worm.vel.vx + worm.vel.vy * worm.vel.vy) || 1;
     const minSpd = worm.speed * 0.7 * rmScale;
     const maxSpd = worm.speed * 1.3 * rmScale;
@@ -339,11 +316,9 @@
       worm.vel.vy *= k;
     }
 
-    // Integrate.
     worm.head.x += worm.vel.vx * dt;
     worm.head.y += worm.vel.vy * dt;
 
-    // Soft bounce off edges.
     const hr = headRadiusFor(seed);
     const pad = 20 + hr;
     if (worm.head.x < pad) {
@@ -367,7 +342,6 @@
 
     pushSegments(worm);
 
-    // Sync stored position (normalized) so persistence tracks the head roughly.
     const w = state.width, h = state.height;
     const padP = Math.max(48, w * 0.05);
     if (seed.position) {
@@ -377,7 +351,6 @@
   }
 
   function pushSegments(worm) {
-    // Chain-follow: each segment eases toward the one in front at a fixed gap.
     const target = { x: worm.head.x, y: worm.head.y };
     const gap = 4;
     for (let i = 0; i < worm.segments.length; i++) {
@@ -395,7 +368,6 @@
     }
   }
 
-  // --- collisions (head-to-head) ---
   function pairKey(a, b) {
     return a < b ? `${a}|${b}` : `${b}|${a}`;
   }
@@ -408,7 +380,6 @@
       if (!w) continue;
       worms.push({ seed, worm: w });
     }
-    // Cooldowns: main+modifier 4s (absorbed immediately); modifier+modifier 2s.
     const COOLDOWN_MAIN_MOD = 4000;
     const COOLDOWN_MOD_MOD = 2000;
     for (let i = 0; i < worms.length; i++) {
@@ -434,7 +405,6 @@
   }
 
   function cleanupCollisions(now) {
-    // Drop entries older than 2s.
     for (const [k, t] of state.collisions) {
       if (now - t > 2000) state.collisions.delete(k);
     }
@@ -451,7 +421,7 @@
     const particles = [];
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.5;
-      const sp = 60 + Math.random() * 60; // px/sec, halved
+      const sp = 60 + Math.random() * 60;
       const col = Math.random() < 0.5 ? colA : colB;
       particles.push({
         x: mx,
@@ -464,15 +434,13 @@
     state.bursts.push({ x: mx, y: my, born: now, max: 600, col: colMid, particles });
     if (state.bursts.length > 12) state.bursts.shift();
 
-    // Single expanding ring (down from two).
     state.rings.push({ x: mx, y: my, born: now, max: 900, col: colMid, radiusStart: 6, radiusEnd: 90 });
     if (state.rings.length > 8) state.rings.shift();
 
-    // Head glow 2x for 400ms on both.
     state.flashHeads.set(A.seed.id, now + 400);
     state.flashHeads.set(B.seed.id, now + 400);
 
-    // Visual-only event; playCollision is a no-op but the hook stays wired.
+    // Visual-only; the collision hook handles absorb logic in App.svelte.
     try {
       const fn = typeof window !== 'undefined' ? window.__sonogarden_onCollision : null;
       if (typeof fn === 'function') fn(A.seed.id, B.seed.id);
@@ -481,15 +449,12 @@
     }
   }
 
-  // --- rendering: worm body / head ---
   function drawWormBody(p, worm, seed, now) {
-    // Main is a uniform circle at canvas center - skip the segmented tail.
     if (seed.role === 'main') return;
     const col = colorForKey(seed);
     const segs = worm.segments;
     const headR = headRadiusFor(seed);
     const playing = state.playingIds.has(seed.id);
-    // Pulse-along-body wave. travels head -> tail in 500ms.
     let pulseHead = -1;
     if (playing && !reducedMotion) {
       const sinceStart = now - worm.lastPlayStart;
@@ -501,25 +466,18 @@
     for (let i = segs.length - 1; i >= 0; i--) {
       const seg = segs[i];
       const k = i / Math.max(1, segs.length - 1);
-      // Segment radius: 1.0 at head(0) -> 0.3 at tail.
       const segR = headR * (1 - k * 0.7);
-      // Alpha: 100% at head -> 30% at tail.
       const alpha = 255 * (1 - k * 0.7);
-      // Pulse wave brightens a 3-segment window.
       let boost = 1;
       if (pulseHead >= 0) {
         const d = Math.abs(i - pulseHead);
         if (d <= 2) boost = 1 + (1 - d / 2) * 0.9;
       }
-      // Per-segment minor color variation for organic feel.
       const tint = mixRgb(col, { r: 255, g: 255, b: 255 }, 0.1 * (i % 2));
-      // Outer halo.
       p.fill(tint.r, tint.g, tint.b, Math.min(255, 60 * (alpha / 255) * boost));
       p.circle(seg.x, seg.y, segR * 3.6);
-      // Mid glow.
       p.fill(tint.r, tint.g, tint.b, Math.min(255, 120 * (alpha / 255) * boost));
       p.circle(seg.x, seg.y, segR * 2.1);
-      // Core.
       p.fill(tint.r, tint.g, tint.b, Math.min(255, alpha * boost));
       p.circle(seg.x, seg.y, segR * 1.1);
     }
@@ -539,7 +497,6 @@
     if (isHover) intensity += 0.8;
     if (flashing) intensity += 1.0;
 
-    // Playing emits pulse rings; faster during an infusion.
     const pulseInterval = infusingMain ? 220 : 400;
     if (playing && !reducedMotion) {
       if (now - worm.lastPulseEmittedAt > pulseInterval) {
@@ -555,23 +512,32 @@
       }
     }
 
-    // Big outer halo.
     p.noStroke();
+    // Cycle 55: main worm gets a soft bloom that pulses at the current mood bpm.
+    if (seed.role === 'main') {
+      let bpm = 60;
+      try { bpm = (window.__sonoMood && typeof window.__sonoMood.bpm === 'number') ? window.__sonoMood.bpm : 60; } catch (_) { /* ignore */ }
+      const periodMs = 60000 / Math.max(20, bpm);
+      const phase = (now % periodMs) / periodMs;
+      const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+      const bloomR = headR * (1.8 + pulse * 0.35);
+      p.fill(col.r, col.g, col.b, 22 + pulse * 28);
+      p.circle(worm.head.x, worm.head.y, bloomR * 2);
+      p.fill(col.r, col.g, col.b, 14 + pulse * 18);
+      p.circle(worm.head.x, worm.head.y, bloomR * 2.8);
+    }
     for (let i = 4; i >= 1; i--) {
       const rr = headR + i * 6;
       const a = (50 - i * 9) * intensity;
       p.fill(col.r, col.g, col.b, Math.min(255, a));
       p.circle(worm.head.x, worm.head.y, rr * 2);
     }
-    // Core.
     p.fill(col.r, col.g, col.b, Math.min(255, 240 * intensity));
     p.circle(worm.head.x, worm.head.y, headR * 1.2);
-    // Bright pinpoint.
     const stig = PALETTE.stigma;
     p.fill(stig.r, stig.g, stig.b, Math.min(255, 240 * intensity));
     p.circle(worm.head.x, worm.head.y, headR * 0.45);
 
-    // Modifier ring + always-visible label showing scale + form.
     if (seed.role === 'modifier') {
       p.noFill();
       p.stroke(col.r, col.g, col.b, 110);
@@ -586,7 +552,6 @@
       p.text(label, worm.head.x, worm.head.y + headR + 14);
     }
 
-    // Hover ring.
     if (isHover) {
       p.noFill();
       p.stroke(stig.r, stig.g, stig.b, 220);
@@ -595,11 +560,9 @@
       p.noStroke();
     }
 
-    // Expose for hit-testing + overlay.
     seed.__screen = { cx: worm.head.x, cy: worm.head.y, r: headR };
   }
 
-  // --- rings / bursts / pulses ---
   function updateAndDrawRings(p, now) {
     if (!state.rings.length) return;
     const keep = [];
@@ -659,7 +622,6 @@
     state.bursts = keep;
   }
 
-  // Absorption is permanent (modifier is pruned on touch).
   function drawInfusionStream(_p, _now) {}
 
   function updateAndDrawDragTrail(p, now) {
@@ -679,7 +641,6 @@
     state.dragTrail = keep;
   }
 
-  // --- cursor management ---
   function updateCursor() {
     if (!hostEl) return;
     if (drag.id) {
@@ -691,7 +652,6 @@
     }
   }
 
-  // --- a11y overlay positioning ---
   function positionOverlayButtons() {
     if (!overlayEl) return;
     const kids = overlayEl.children;
@@ -709,7 +669,6 @@
     }
   }
 
-  // --- pointer handling with drag + ripple ---
   function localPointer(ev) {
     const rect = hostEl.getBoundingClientRect();
     return { mx: ev.clientX - rect.left, my: ev.clientY - rect.top };
@@ -805,12 +764,10 @@
     const seed = state.seeds.find((s) => s.id === id);
     if (!seed) return;
     const worm = state.worms.get(id);
-    // <4px: click.
     if (moved < 4) {
       onseedClick(id);
       return;
     }
-    // Released after drag: give it a small random push.
     if (worm) {
       const ang = Math.random() * Math.PI * 2;
       worm.vel.vx = Math.cos(ang) * worm.speed;
@@ -818,7 +775,6 @@
       worm.target = pickRandomTarget();
       worm.nextTargetAt = performance.now() + 3000 + Math.random() * 3000;
     }
-    // Sync seed.position from the worm head so the persisted drop matches.
     if (worm && state.width && state.height) {
       const padP = Math.max(48, state.width * 0.05);
       const nx = Math.max(0, Math.min(1, (worm.head.x - padP) / Math.max(1, state.width - padP * 2)));
@@ -858,7 +814,6 @@
     return '';
   }
 
-  // --- lifecycle ---
   $effect(() => {
     if (!hostEl) return;
 
@@ -926,7 +881,7 @@
     z-index: 2;
   }
 
-  /* pointer-events: none so canvas gets mouse/touch; focus still works. */
+  /* pointer-events: none so canvas handles mouse/touch; focus still works. */
   .seed-a11y {
     position: absolute;
     pointer-events: none;

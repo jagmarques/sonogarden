@@ -1,5 +1,4 @@
 <script>
-  // Bottom-right 44x44 mute toggle. Always visible. Persists via onchange handler.
   let { muted = false, onchange = () => {} } = $props();
 
   function toggle() {

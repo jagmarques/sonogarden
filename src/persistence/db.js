@@ -1,12 +1,4 @@
-// IndexedDB persistence layer for sonogarden.
-// See .company/ai/seed-dna.md for Seed schema and .company/ai/cycle1.md unresolved item 4.
-//
-// Storage format decision: JSON.
-// Reason: NoteSequence from @magenta/music is already a plain JS object (POJO-shaped
-// protobuf); IndexedDB structured clone handles POJOs natively. Protobuf bytes would
-// add encode/decode steps on every read/write and complicate export/gift flows that
-// need the DNA in human-readable form. If encode(JSON-roundtripped seq) fails in a
-// future cycle, switch to protobuf-bytes (.encode(seq).finish() / .decode(bytes)).
+// JSON over IndexedDB; NoteSequence is already POJO so structured clone just works.
 
 import { openDB as idbOpenDB } from 'idb';
 
@@ -31,7 +23,7 @@ export function openDB() {
       }
     },
     blocked() { /* another tab has this DB open */ },
-    blocking() { /* we block another tab */ },
+    blocking() { /* ignore */ },
   });
   return dbPromise;
 }

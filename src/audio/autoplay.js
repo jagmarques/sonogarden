@@ -1,186 +1,95 @@
-// Transport-driven autoplay. Each tick generates a fresh improvised phrase.
-// One Tone.Loop for the main; modifiers never play on their own.
-
-import * as Tone from 'tone';
-import { playNoteSequence } from './player.js';
-import { generatePhrase } from './improvise.js';
-import { getLiveMelody, liveMelodyVersion } from './composer.js';
-import { infusion } from './infusion.js';
+import { playNoteSequence, startDrone, stopDrone } from './player.js';
+import { sampleMelody, transposeNoteSequence } from '../ai/magenta.js';
 import { getCurrentMood } from './moods.js';
-import { gardenState } from '../state/store.svelte.js';
 
 const DEBUG = false;
-const MIN_ENERGY_TO_PLAY = 0;
+// MusicVAE mel_4bar_small_q2 samples in C major by default (MIDI pitch 60 = tonic).
+const SAMPLE_DEFAULT_TONIC = 60;
 
-const DEFAULT_INTERVAL = '10s';
-
-function moodInterval() {
-  const m = getCurrentMood();
-  return (m && m.interval) || DEFAULT_INTERVAL;
-}
-
-const _loops = new Map();
-let _getSeeds = null;
-let _markPlaying = null;
-let _markStopped = null;
 let _running = false;
-
-function debugEnabled() {
-  if (DEBUG) return true;
-  return typeof window !== 'undefined' && window.__SONO_DEBUG__ === true;
-}
+let _timer = null;
+let _inflight = false;
+let _onMelody = null;
 
 function debug(...args) {
-  if (debugEnabled()) {
+  if (DEBUG) {
     // eslint-disable-next-line no-console
     console.log('[sonogarden.autoplay]', ...args);
   }
 }
 
-function currentSeeds() {
-  if (typeof _getSeeds !== 'function') return [];
+function emitMelody(ns) {
+  if (typeof _onMelody === 'function') {
+    try { _onMelody(ns); } catch (_) { /* ignore */ }
+  }
+}
+
+async function tick() {
+  if (!_running || _inflight) return;
+  _inflight = true;
   try {
-    const s = _getSeeds();
-    return Array.isArray(s) ? s : [];
-  } catch (_) {
-    return [];
-  }
-}
-
-function currentSeedById(id) {
-  return currentSeeds().find((s) => s.id === id) || null;
-}
-
-function triggerSeed(seedId) {
-  const seed = currentSeedById(seedId);
-  if (!seed) return;
-  const energy = typeof seed.energy === 'number' ? seed.energy : 1;
-  if (energy < MIN_ENERGY_TO_PLAY) return;
-
-  if (typeof _markPlaying === 'function') {
-    try { _markPlaying(seedId); } catch (_) { /* ignore */ }
-  }
-
-  // Generate a fresh non-repeating phrase every tick.
-  const absorbed = infusion && infusion.absorbedIds ? infusion.absorbedIds.size : 0;
-  const midi = generatePhrase({ scale: seed.scale || 'dorian', absorbed });
-
-  // Publish the composer's live RH melody so the Tend DNA card can read it.
-  if (seed.role === 'main') {
-    gardenState.liveMelody = getLiveMelody();
-    gardenState.liveMelodyTick = liveMelodyVersion();
-  }
-
-  debug('triggerSeed fire', {
-    seedId: seed.id,
-    scale: seed.scale,
-    absorbed,
-    notes: midi.notes.length,
-    totalTime: midi.totalTime,
-  });
-
-  playNoteSequence(midi, {
-    seedId: seed.id,
-    scale: seed.scale,
-    form: seed.form,
-    energy,
-    onEnd: () => {
-      if (typeof _markStopped === 'function') {
-        try { _markStopped(seedId); } catch (_) { /* ignore */ }
-      }
-    },
-  });
-}
-
-function registerSeed(seed) {
-  if (!seed || !seed.id) return;
-  // Only the main seed loops; modifiers sit silent until absorbed.
-  if (seed.role !== 'main') return;
-  if (_loops.has(seed.id)) return;
-
-  const loop = new Tone.Loop(() => {
-    triggerSeed(seed.id);
-  }, moodInterval());
-
-  try {
-    loop.start('+0m');
+    const mood = getCurrentMood();
+    const tonic = typeof mood.tonic === 'number' ? mood.tonic : SAMPLE_DEFAULT_TONIC;
+    // Per-tick temperature jitter keeps successive phrases from converging on the same melodic shape.
+    const temperature = 0.9 + Math.random() * 0.5;
+    const raw = await sampleMelody({ qpm: mood.bpm, temperature });
+    const shifted = transposeNoteSequence(raw, tonic - SAMPLE_DEFAULT_TONIC);
+    debug('sampled melody', { notes: shifted.notes?.length, totalTime: shifted.totalTime });
+    playNoteSequence(shifted, { qpm: mood.bpm });
+    emitMelody(shifted);
   } catch (err) {
-    debug('loop.start failed', err);
+    debug('tick failed', err);
+    if (typeof window !== 'undefined') {
+      window.__sonoStats = window.__sonoStats || { notes: 0, plays: 0, drones: 0 };
+      window.__sonoStats.lastError = (err && err.message) || String(err);
+    }
+  } finally {
+    _inflight = false;
   }
-
-  _loops.set(seed.id, { loop });
 }
 
-function unregisterSeed(seedId) {
-  const entry = _loops.get(seedId);
-  if (!entry) return;
-  try { entry.loop.stop(); } catch (_) { /* ignore */ }
-  try { entry.loop.dispose(); } catch (_) { /* ignore */ }
-  _loops.delete(seedId);
+function scheduleNext() {
+  if (!_running) return;
+  if (_timer) clearTimeout(_timer);
+  const mood = getCurrentMood();
+  const intervalMs = Math.max(4, (mood.interval || 16)) * 1000;
+  _timer = setTimeout(async () => {
+    await tick();
+    scheduleNext();
+  }, intervalMs);
 }
 
-/**
- * Kick off Transport-driven autoplay. Must be called AFTER initAudio resolves.
- * @param {object} _unusedGardenRef reserved
- * @param {object} hooks
- */
-export function startAutoplay(_unusedGardenRef, hooks = {}) {
-  _getSeeds = typeof hooks.getSeeds === 'function' ? hooks.getSeeds : _getSeeds;
-  _markPlaying = typeof hooks.markPlaying === 'function' ? hooks.markPlaying : _markPlaying;
-  _markStopped = typeof hooks.markStopped === 'function' ? hooks.markStopped : _markStopped;
-
+export async function startAutoplay({ onMelody } = {}) {
+  if (_running) return;
   _running = true;
-  refreshAutoplay();
-
-  // Kick the main immediately so the user hears sound on the first bar.
-  const seeds = currentSeeds();
-  const main = seeds.find((s) => s && s.role === 'main');
-  if (main) {
-    setTimeout(() => triggerSeed(main.id), 120);
-  }
+  _onMelody = typeof onMelody === 'function' ? onMelody : null;
+  const mood = getCurrentMood();
+  startDrone(mood);
+  await tick();
+  scheduleNext();
 }
 
-/** Cancel all loops. Does not touch Tone.Transport or Destination.mute. */
 export function stopAutoplay() {
   _running = false;
-  const ids = Array.from(_loops.keys());
-  for (const id of ids) unregisterSeed(id);
+  if (_timer) { clearTimeout(_timer); _timer = null; }
+  stopDrone();
 }
 
-/**
- * Rebuild loops to match the current seed set. Call after plant/prune/breed.
- */
-export function refreshAutoplay() {
+// Tonic / bpm / reverb changed; sample a fresh melody now and rebase interval.
+export async function onMoodChange() {
   if (!_running) return;
-  const seeds = currentSeeds();
-  const currentIds = new Set(seeds.map((s) => s.id));
-
-  for (const id of Array.from(_loops.keys())) {
-    if (!currentIds.has(id)) unregisterSeed(id);
-  }
-
-  seeds.forEach((seed) => {
-    if (!_loops.has(seed.id)) registerSeed(seed);
-  });
+  const mood = getCurrentMood();
+  startDrone(mood);
+  await tick();
+  scheduleNext();
 }
 
-/** Rebuild the main loop so the new mood interval takes effect immediately. */
-export function onMoodChange() {
-  if (!_running) return;
-  const seeds = currentSeeds();
-  const main = seeds.find((s) => s && s.role === 'main');
-  if (!main) return;
-  unregisterSeed(main.id);
-  registerSeed(main);
-  setTimeout(() => triggerSeed(main.id), 80);
+// Replay a stored NoteSequence (saved moment or shared melody) without breaking autoplay cadence.
+export function playStoredMelody(ns) {
+  if (!ns || !Array.isArray(ns.notes) || ns.notes.length === 0) return;
+  const mood = getCurrentMood();
+  const qpm = (ns.tempos && ns.tempos[0] && ns.tempos[0].qpm) || mood.bpm;
+  playNoteSequence(ns, { qpm });
+  emitMelody(ns);
+  scheduleNext();
 }
-
-/** For tests / diagnostics. */
-export function __getLoopCount() {
-  return _loops.size;
-}
-
-export const __constants = Object.freeze({
-  DEFAULT_INTERVAL,
-  MIN_ENERGY_TO_PLAY,
-});
