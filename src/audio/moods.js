@@ -1,8 +1,16 @@
 // Mood table. Every citation is WebFetch-verified from Wikipedia (2026-04-21).
-// SOURCE BPM ranges: https://en.wikipedia.org/wiki/Tempo
-//   Adagio 44-66 bpm, Andante 56-108 bpm, Allegro 120-156 bpm.
-// SOURCE Gymnopedies mood + key: https://en.wikipedia.org/wiki/Gymnop%C3%A9dies
-//   "Lent et grave" A minor (slow and grave), 3/4 time, atmospheric.
+// SOURCE BPM: https://en.wikipedia.org/wiki/Tempo (Adagio 44-66, Andante 56-108, Allegro 120-156)
+// SOURCE Gymnopedies: https://en.wikipedia.org/wiki/Gymnop%C3%A9dies ("Lent et grave" A minor, 3/4)
+// SOURCE Brain regions: https://en.wikipedia.org/wiki/Neuroscience_of_music
+//   Blood & Zatorre 2001: pleasant music -> blood-flow changes in amygdala, orbitofrontal cortex,
+//     ventral striatum, midbrain, ventral medial prefrontal cortex.
+//   Schmidt & Trainor 2001: joyful music -> left frontal EEG; fearful/sad -> right frontal EEG.
+//   Wikipedia: nucleus accumbens is involved in music emotion and rhythmic timing.
+// NOTE: these are correlational fMRI/EEG findings, not prescriptive. We do not claim this app
+// activates those regions; we cite what is associated in the literature with similar stimuli.
+// NOTE: Meta/Facebook has not released a public stimulus-to-brain predictor as of 2026-04-21
+// (verified via ai.meta.com/research/ and the brain-AI research blog post). The closest public
+// tool is NeuroSynth (neurosynth.org), which performs fMRI meta-analysis from terms.
 
 export const MOODS = {
   focus: {
@@ -18,7 +26,7 @@ export const MOODS = {
     pitchMin: 55,
     pitchMax: 84,
     interval: 16,
-    citation: '60 bpm sits inside Adagio (44-66) per Wikipedia Tempo. Adagio is "slow with great expression".',
+    citation: '60 bpm Adagio (Wikipedia Tempo). Pleasant music correlates with ventral medial PFC blood-flow changes (Blood and Zatorre 2001, via Neuroscience of music).',
   },
   study: {
     label: 'study',
@@ -33,7 +41,7 @@ export const MOODS = {
     pitchMin: 53,
     pitchMax: 86,
     interval: 14,
-    citation: '72 bpm is Andante (walking pace, 56-108 per Wikipedia Tempo).',
+    citation: '72 bpm Andante (Wikipedia Tempo). Joyful music correlates with left frontal EEG activity (Schmidt and Trainor 2001, via Neuroscience of music).',
   },
   meditate: {
     label: 'meditate',
@@ -48,7 +56,7 @@ export const MOODS = {
     pitchMin: 48,
     pitchMax: 78,
     interval: 18,
-    citation: 'A minor, slow Adagio. Matches Satie Gymnopedie III "Lent et grave" (A minor, 3/4) per Wikipedia.',
+    citation: 'A minor, slow Adagio (matches Satie Gymnopedie III "Lent et grave" per Wikipedia). Pleasant music correlates with amygdala and orbitofrontal cortex blood-flow changes (Blood and Zatorre 2001).',
   },
   sleep: {
     label: 'sleep',
@@ -63,7 +71,7 @@ export const MOODS = {
     pitchMin: 43,
     pitchMax: 74,
     interval: 20,
-    citation: '50 bpm is at the slow end of Adagio per Wikipedia Tempo. No strong BPM-for-sleep study, convention only.',
+    citation: '50 bpm slow Adagio (convention only, no strong BPM-for-sleep study). Slow pleasant music correlates with reduced arousal markers per the music-emotion literature (Wikipedia Neuroscience of music).',
   },
   run: {
     label: 'run',
@@ -78,7 +86,7 @@ export const MOODS = {
     pitchMin: 55,
     pitchMax: 88,
     interval: 10,
-    citation: '120 bpm is Allegro (120-156 per Wikipedia Tempo), the classical "fast and bright" range.',
+    citation: '120 bpm Allegro (Wikipedia Tempo). Rhythmic timing engages the nucleus accumbens (Wikipedia Neuroscience of music).',
   },
 };
 
