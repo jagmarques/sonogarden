@@ -1,0 +1,16 @@
+node_modules
+dist
+.DS_Store
+.env
+.env.local
+*.log
+.vite
+.svelte-kit
+.gstack/
+.company/
+.planning/
+.claude/
+COMPANY.md
+HANDOFF.md
+STATUS.md
+RESEARCH.md

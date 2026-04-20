@@ -1,0 +1,52 @@
+:root {
+  --loam: #14191C;
+  --moss: #2A3A33;
+  --petal: #E8C9A0;
+  --iris: #8AA6C1;
+  --pollen: #F2E27A;
+  --font: 'Inter', -apple-system, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: var(--font);
+  --serif: var(--font);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--loam);
+  color: var(--petal);
+  font-family: var(--font);
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  letter-spacing: -0.01em;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--pollen);
+  outline-offset: 3px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
