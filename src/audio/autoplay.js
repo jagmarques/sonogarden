@@ -30,8 +30,8 @@ async function tick() {
   try {
     const mood = getCurrentMood();
     const tonic = typeof mood.tonic === 'number' ? mood.tonic : SAMPLE_DEFAULT_TONIC;
-    // Per-tick temperature jitter keeps successive phrases from converging on the same melodic shape.
-    const temperature = 0.9 + Math.random() * 0.5;
+    // Lower, narrower temperature band for coherent mystical lines instead of jumpy ones.
+    const temperature = 0.55 + Math.random() * 0.25;
     const raw = await sampleMelody({ qpm: mood.bpm, temperature });
     const shifted = transposeNoteSequence(raw, tonic - SAMPLE_DEFAULT_TONIC);
     debug('sampled melody', { notes: shifted.notes?.length, totalTime: shifted.totalTime });
