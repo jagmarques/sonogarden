@@ -57,7 +57,7 @@ export const MOODS = {
     chimeMs: [10000, 18000],
     chordChangeMs: [50000, 80000],
     style: 2,
-    phraseVoice: 'piano',
+    phraseVoice: 'harp',
     shimmerVoice: null,
     droneVoice: null,
   },
