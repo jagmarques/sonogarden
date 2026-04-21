@@ -6,12 +6,10 @@
   import MuteButton from './ui/MuteButton.svelte';
   import StartOverlay from './ui/StartOverlay.svelte';
 
-  import { gardenState, setLiveMelody, loadSavedMoments, persistSavedMoments, registerVisit, loadSessionSec, bumpSessionSec, noteMoodEntered, moodSecondsSoFar } from './state/store.svelte.js';
-  import { initMagenta } from './ai/magenta.js';
+  import { gardenState, setLiveMelody, loadSavedMoments, persistSavedMoments } from './state/store.svelte.js';
   import { initAudio, setMuted, waitForVoicesLoaded, setMood, stopAll } from './audio/player.js';
   import { MOODS, DEFAULT_MOOD, moodByHour } from './audio/moods.js';
   import { startAutoplay, stopAutoplay, onMoodChange, playStoredMelody } from './audio/autoplay.js';
-  import { emitBloom } from './audio/events.js';
 
   const DEBUG = false;
 
@@ -30,12 +28,8 @@
   let shareFlashTimer = null;
   let savedExpanded = $state(false);
   let pendingSharedMelody = null;
-  let sessionTimer = null;
-  let bloomTimer = null;
 
   const muted = $derived(gardenState.muted);
-  const sessionMin = $derived(Math.floor((gardenState.sessionSec || 0) / 60));
-  const moodUnlockSec = $derived(moodSecondsSoFar());
 
   function logError(context, err) {
     if (DEBUG) {
@@ -96,18 +90,7 @@
     activity = e.target.value;
     setMood(activity);
     stopAll();
-    noteMoodEntered();
     onMoodChange().catch((err) => logError('onMoodChange failed', err));
-  }
-
-  // Variable-ratio reward: 6 to 18 minute window, classic intermittent schedule.
-  function scheduleBloomEvent() {
-    if (bloomTimer) clearTimeout(bloomTimer);
-    const minutes = 6 + Math.random() * 12;
-    bloomTimer = setTimeout(() => {
-      emitBloom();
-      scheduleBloomEvent();
-    }, minutes * 60 * 1000);
   }
 
   function compactMelody(ns) {
@@ -173,7 +156,6 @@
     persistSavedMoments();
     gardenState.saveFlash = true;
     setTimeout(() => { gardenState.saveFlash = false; }, 1400);
-    emitBloom();
   }
 
   function handleLoadMoment(idx) {
@@ -216,8 +198,6 @@
 
   function handleBeforeUnload() {
     try { stopAutoplay(); stopAll(); } catch (_) { /* ignore */ }
-    if (sessionTimer) { clearInterval(sessionTimer); sessionTimer = null; }
-    if (bloomTimer) { clearTimeout(bloomTimer); bloomTimer = null; }
   }
 
   function handleVisibilityChange() {
@@ -237,29 +217,13 @@
   }
 
   async function boot() {
-    bootPhase = 'magenta';
-    try {
-      await initMagenta();
-    } catch (err) {
-      logError('initMagenta failed', err);
-      bootError = err?.message || 'Audio engine unavailable';
-      booting = false;
-      return;
-    }
     loadSavedMoments();
     processShareParam();
-    loadSessionSec();
-    registerVisit();
-    // First-open time-of-day mood pick, but only if the URL didn't set one via share.
     const hadShare = typeof window !== 'undefined' && new URL(location.href).searchParams.has('s');
     if (!hadShare) activity = moodByHour(new Date().getHours());
     setMood(activity);
-    noteMoodEntered();
     booting = false;
     maybeStartAutoplay();
-    if (sessionTimer) clearInterval(sessionTimer);
-    sessionTimer = setInterval(() => { if (audioUnlocked) bumpSessionSec(5); }, 5000);
-    scheduleBloomEvent();
   }
 
   function reloadPage() {
@@ -325,12 +289,11 @@
   {/if}
 
   <div class="control-bar">
-    <select class="activity-select" aria-label="Activity" value={activity} onchange={handleActivityChange} title={MOODS[activity]?.citation ?? ''}>
+    <select class="activity-select" aria-label="Activity" value={activity} onchange={handleActivityChange}>
       {#each Object.keys(MOODS) as key}
         <option value={key}>{MOODS[key].label}</option>
       {/each}
     </select>
-    <span class="mood-evidence">{MOODS[activity]?.citation ?? ''}</span>
     <button type="button" class="spawn-toggle" onclick={handleSaveMoment}>save this moment</button>
     <button type="button" class="spawn-toggle" onclick={handleShare}>share</button>
     {#if shareFlash}

@@ -27,6 +27,10 @@
   let unsubscribeNote = null;
   let centerpiece = null;
   let centerInner = null;
+  let connLines = null;
+  let connPosAttr = null;
+  const MAX_CONNECTIONS = 200;
+  const CONNECTION_DIST = 4.5;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -312,6 +316,18 @@
     centerInner = new THREE.LineSegments(inEdges, inMat);
     scene.add(centerInner);
 
+    // Connecting lines between nearby orbs (particles.js-style). Position buffer is rewritten
+    // every frame from the current live orb positions.
+    const connGeom = new THREE.BufferGeometry();
+    connPosAttr = new THREE.BufferAttribute(new Float32Array(MAX_CONNECTIONS * 2 * 3), 3);
+    connPosAttr.setUsage(THREE.DynamicDrawUsage);
+    connGeom.setAttribute('position', connPosAttr);
+    connGeom.setDrawRange(0, 0);
+    const connMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.22, depthWrite: false });
+    connMat.color = accentVec3(moodRef);
+    connLines = new THREE.LineSegments(connGeom, connMat);
+    scene.add(connLines);
+
     unsubscribeNote = onNote((e) => {
       if (disposed) return;
       spawnOrb(e.pitch, e.velocity);
@@ -375,6 +391,42 @@
       camera.position.z = 14;
       camera.lookAt(mouseSmoothed.x * 0.3, mouseSmoothed.y * 0.2, 0);
       stepAmbient(t);
+      // Update orb-to-orb connecting lines each frame. Only visible orbs pair up.
+      if (connPosAttr && posAttr) {
+        const arr = connPosAttr.array;
+        let pairs = 0;
+        const thr2 = CONNECTION_DIST * CONNECTION_DIST;
+        for (let i = 0; i < ORB_COUNT && pairs < MAX_CONNECTIONS; i++) {
+          const ai = i * 3;
+          const iBorn = bornAttr.array[i];
+          const iLife = lifeAttr.array[i];
+          if (t - iBorn > iLife) continue;
+          const ax = posAttr.array[ai];
+          const ay = posAttr.array[ai + 1];
+          const az = posAttr.array[ai + 2];
+          for (let j = i + 1; j < ORB_COUNT && pairs < MAX_CONNECTIONS; j++) {
+            const jBorn = bornAttr.array[j];
+            const jLife = lifeAttr.array[j];
+            if (t - jBorn > jLife) continue;
+            const bi = j * 3;
+            const dx = posAttr.array[bi] - ax;
+            const dy = posAttr.array[bi + 1] - ay;
+            const dz = posAttr.array[bi + 2] - az;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < thr2) {
+              const o = pairs * 6;
+              arr[o] = ax; arr[o + 1] = ay; arr[o + 2] = az;
+              arr[o + 3] = posAttr.array[bi]; arr[o + 4] = posAttr.array[bi + 1]; arr[o + 5] = posAttr.array[bi + 2];
+              pairs++;
+            }
+          }
+        }
+        connLines.geometry.setDrawRange(0, pairs * 2);
+        connPosAttr.needsUpdate = true;
+        if (connLines.material && connLines.material.color) {
+          connLines.material.color.copy(pointsMat.uniforms.uAccent.value);
+        }
+      }
       renderer.clear();
       renderer.render(bgScene, bgCam);
       renderer.render(scene, camera);
@@ -402,6 +454,7 @@
       }
       if (centerpiece) { centerpiece.geometry.dispose(); centerpiece.material.dispose(); }
       if (centerInner) { centerInner.geometry.dispose(); centerInner.material.dispose(); }
+      if (connLines) { connLines.geometry.dispose(); connLines.material.dispose(); }
     };
   });
 
