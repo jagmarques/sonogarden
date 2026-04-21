@@ -104,17 +104,19 @@
 
   async function handleUnlock() {
     if (audioUnlocked) return;
+    // Tone.start() MUST run inside the gesture chain, synchronously with the tap. Await it
+    // before dismissing the overlay so the AudioContext is guaranteed running before autoplay.
+    try {
+      await initAudio();
+      setMood(activity);
+    } catch (err) {
+      logError('initAudio failed', err);
+    }
     audioUnlocked = true;
-    // Dismiss the overlay immediately. Audio + sample loading runs in the background so mobile
-    // never sees a "loading harp" hang. If anything fails the scene still shows and user can
-    // interact with 3D visuals.
     tuningInstruments = false;
     samplePercent = 100;
-    initAudio()
-      .then(() => setMood(activity))
-      .catch((err) => logError('initAudio failed', err));
+    // Harp samples load in background; pad + noise start right away regardless.
     waitForVoicesLoaded().catch((err) => logError('voices load', err));
-    await new Promise((r) => setTimeout(r, 200));
     maybeStartAutoplay();
     startSessionTimer();
     if (listenTimer) clearInterval(listenTimer);
