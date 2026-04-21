@@ -629,6 +629,14 @@
     background: #E8C9A0;
     border-color: #E8C9A0;
   }
+  @media (hover: none), (max-width: 768px) {
+    .mood-pill,
+    .control-bar .spawn-toggle {
+      height: 40px;
+      padding: 0 18px;
+      font-size: 14px;
+    }
+  }
   .control-bar select,
   .control-bar .spawn-toggle {
     height: 32px;
