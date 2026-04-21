@@ -1,6 +1,6 @@
 // Thin facade over the ambient engine. Kept as autoplay.js so App.svelte's imports don't break.
 
-import { playNoteSequence, startDrone, stopDrone } from './player.js';
+import { playNoteSequence } from './player.js';
 import { startAmbient, stopAmbient, onMoodChange as ambientMoodChange } from './ambient.js';
 
 let _running = false;
@@ -16,7 +16,6 @@ export async function startAutoplay({ onMelody } = {}) {
 export function stopAutoplay() {
   _running = false;
   stopAmbient();
-  stopDrone();
 }
 
 export async function onMoodChange() {
