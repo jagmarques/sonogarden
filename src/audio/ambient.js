@@ -1,8 +1,4 @@
-// Endel-style texture engine: continuous pink-noise bed, slow FM sine pads, rare harp chimes.
-// SOURCE Endel mode descriptions: https://endel.io (verified 2026-04-21).
-// SOURCE Sleep profile: Endel homepage quote "starts with a gentle tune ... then proceeds to a
-//   very soft white noise, loud enough to break the silence but quiet enough that you don't notice it".
-// No beat grid. No metered progression. Everything on independent slow timers.
+// Texture engine: pink-noise bed + sine pad + per-mood phrase scheduler. No beat grid.
 
 import * as Tone from 'tone';
 import { triggerVoice, getMelodyBus, getPadBus, getVoice } from './player.js';
@@ -82,13 +78,7 @@ export function setPadVolume(db) {
   }
 }
 
-// Pink noise at -30 dB lowpassed at 800 Hz. The strongest peer-reviewed background-tone
-// finding is for pink noise at low SPL during slow-wave sleep (Papalambros 2017,
-// Papalambros/Malkani 2019); for focus the JAACAP 2024 meta-analysis shows a small benefit
-// in ADHD listeners only. Brown noise has zero RCT support, white noise has known REM and
-// hearing risks (PMC scoping review 2024). Pink stays.
-// SOURCES: pubmed.ncbi.nlm.nih.gov/28337134, onlinelibrary.wiley.com/doi/10.1002/acn3.796,
-//          pubmed.ncbi.nlm.nih.gov/38428577, pubmed.ncbi.nlm.nih.gov/38663282
+// Pink noise -30 dB low-passed 800 Hz. Strongest tone evidence per scientific-tones.md.
 function ensureNoise() {
   if (_noise) return;
   const dest = getMelodyBus();
@@ -135,10 +125,7 @@ function scheduleChordDrift(mood) {
   }, nextMs);
 }
 
-// Phrase templates as pentatonic-scale offsets. 0 = tonic. Each shape is a small lyrical
-// figure: ascent, descent, arch, return-to-tonic, sigh, call-and-answer. Longer phrases
-// (5-7 notes) read as melodies, not chimes. Repeats of the same scale degree create
-// suspensions and a vocal feel.
+// Pentatonic-scale offsets. Lyrical shapes with returns and suspensions, not random walks.
 const PHRASES = [
   [0, 2, 4, 2, 0],
   [4, 3, 2, 0],
@@ -159,8 +146,7 @@ function jitter(baseMs, amtMs = 40) {
   return baseMs + (Math.random() - 0.5) * amtMs * 2;
 }
 
-// Per-voice phrase tempo ranges. Bowed and reeded instruments want longer note spacing
-// than plucked ones so the attack envelope has room to speak.
+// Per-voice ms-per-note ranges; bowed/reeded instruments need wider spacing.
 const VOICE_TEMPO = {
   piano:       [320, 580],
   harp:        [300, 540],
@@ -223,12 +209,7 @@ function playShimmer(m) {
   triggerVoice(key, pitch, 0.18, 4.5);
 }
 
-// Tanpura-style drone: re-triggers the mood's drone voice on the mood TONIC (not the
-// current chord root) plus its perfect fifth. Tonic-centred so the bed never wanders, the
-// chord progression handles motion. Hold time exceeds re-trigger interval so each note
-// overlaps the next and the drone reads as continuous, not pulsed (per the science: real
-// tanpura is sustained; pulsed drones add unwanted rhythm).
-// SOURCE: pmc.ncbi.nlm.nih.gov/articles/PMC10754644 (tanpura EEG alpha/theta complexity).
+// Tanpura-style drone on tonic + fifth. Hold > retrigger so it sounds continuous.
 function scheduleDrone(m) {
   if (!_running) return;
   const key = m.droneVoice;

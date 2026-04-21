@@ -1,16 +1,4 @@
-// 4 Endel-style modes: focus, relax, sleep, activity.
-// SOURCE Endel modes: https://endel.io (verified 2026-04-21).
-//
-// Palette grounded in TWO verified Wikipedia sources:
-//  - Biophilic_design: "Natural colors or 'earth-tones' ... subdued tones of brown, green, and
-//    blue." "Brighter colors should only be used sparingly."
-//  - Earth_tone: lists #555142 forest floor, #4b6d41 artichoke, #836539 dirt brown,
-//    #0e695f evergreen forest as representative earth tones. Described as "warm and muted ...
-//    calming hues".
-//
-// Gradient lightness is lifted to HSL L=22-30% (was 5-16%) so the background reads as
-// "a dim lounge" rather than a void, per user feedback 2026-04-21. Saturation kept 10-20% so no
-// hue feels branded or energetic (per Biophilic "bright colors used sparingly").
+// 3 modes: focus, meditate, sleep. Earth-tone palette per Biophilic design refs.
 
 export const MOODS = {
   focus: {
