@@ -369,8 +369,8 @@
       mouseSmoothed.x += (mouse.x - mouseSmoothed.x) * 0.04;
       mouseSmoothed.y += (mouse.y - mouseSmoothed.y) * 0.04;
       if (moodRef) {
-        bgMat.uniforms.uAccent.value.lerp(accentVec3(moodRef), 0.02);
-        bgMat.uniforms.uDeep.value.lerp(deepVec3(moodRef), 0.02);
+        bgMat.uniforms.uAccent.value.lerp(accentVec3(moodRef), 0.12);
+        bgMat.uniforms.uDeep.value.lerp(deepVec3(moodRef), 0.12);
         pointsMat.uniforms.uAccent.value.copy(bgMat.uniforms.uAccent.value);
         if (centerpiece) centerpiece.material.color.copy(bgMat.uniforms.uAccent.value);
         if (centerInner) centerInner.material.color.copy(bgMat.uniforms.uAccent.value);
