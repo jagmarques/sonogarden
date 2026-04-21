@@ -9,9 +9,9 @@ const MINOR_TRIAD = [0, 3, 7];
 // Full diatonic scales for richer melodic material than pentatonic.
 const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
-// Chord-tone indices into the diatonic scale (1-3-5-7).
-const CHORD_TONES_MAJ = [0, 2, 4, 6];
-const CHORD_TONES_MIN = [0, 2, 4, 6];
+// Root, 3rd, 5th only. 7th excluded to avoid maj7-vs-pad dissonance.
+const CHORD_TONES_MAJ = [0, 2, 4];
+const CHORD_TONES_MIN = [0, 2, 4];
 
 // Key-related chords only. Roots relative to tonic in semitones.
 const MAJOR_CHORDS = [
@@ -37,6 +37,8 @@ let _chordTimer = null;
 let _chimeTimer = null;
 let _droneTimer = null;
 let _lastDroneVoice = null;
+// Last note from the phrase scheduler; biases next phrase's octave for continuity.
+let _lastPhrasePitch = null;
 
 function triadFor(type) {
   return type === 'min' ? MINOR_TRIAD : MAJOR_TRIAD;
@@ -177,12 +179,13 @@ const VOICE_OCTAVE = {
   harmonium:   0,
 };
 
-function pickOctaveOffset() {
-  const r = Math.random();
-  if (r < 0.06) return -12;
-  if (r < 0.78) return 0;
-  if (r < 0.94) return 12;
-  return -12 + (Math.random() < 0.5 ? 0 : 24);
+// Picks the octave offset that places this phrase's first note nearest to the previous final.
+function pickConnectedOctave(targetFirstPitch) {
+  if (_lastPhrasePitch == null) return 0;
+  const cands = [-12, 0, 12];
+  return cands.reduce((best, off) =>
+    Math.abs((targetFirstPitch + off) - _lastPhrasePitch) <
+    Math.abs((targetFirstPitch + best) - _lastPhrasePitch) ? off : best);
 }
 
 function playPhrase(m) {
@@ -192,11 +195,16 @@ function playPhrase(m) {
   const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
   const tmpl = PHRASES[Math.floor(Math.random() * PHRASES.length)];
   const baseOctave = VOICE_OCTAVE[voiceKey] ?? 12;
-  const octJump = pickOctaveOffset();
+  // 80pct: octave biased to connect with last phrase. 20pct: random for variety.
+  const firstScaleSemis = scale[Math.max(0, Math.min(scale.length - 1, tmpl[0].n))];
+  const firstNominal = m.tonic + chord.root + firstScaleSemis + baseOctave;
+  const octJump = (Math.random() < 0.8) ? pickConnectedOctave(firstNominal) :
+    (Math.random() < 0.5 ? 0 : 12);
   const [tLo, tHi] = VOICE_TEMPO[voiceKey] || [320, 580];
   const beatMs = tLo + Math.random() * (tHi - tLo);
   let cursor = 0;
   const n = tmpl.length;
+  let lastPitch = null;
   for (let i = 0; i < n; i++) {
     const step = tmpl[i];
     let degree = step.n;
@@ -220,7 +228,9 @@ function playPhrase(m) {
       triggerVoice(voiceKey, pitch, Math.max(0.15, Math.min(0.75, vel)), holdSec);
     }, Math.max(0, when));
     cursor += noteMs;
+    lastPitch = pitch;
   }
+  if (lastPitch != null) _lastPhrasePitch = lastPitch;
   // 25 percent chance of a soft answering note in the OPPOSITE octave for call-and-response.
   if (Math.random() < 0.25) {
     const tone = tones[Math.floor(Math.random() * tones.length)];
@@ -278,6 +288,7 @@ function scheduleChime() {
 export function startAmbient() {
   if (_running) return;
   _running = true;
+  _lastPhrasePitch = null;
   const mood = getCurrentMood();
   ensureNoise();
   pickNextChord(mood);
@@ -298,6 +309,7 @@ export function stopAmbient() {
 
 export function onMoodChange() {
   if (!_running) return;
+  _lastPhrasePitch = null;
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
