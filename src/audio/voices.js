@@ -53,7 +53,7 @@ const HARP_URLS = Object.freeze({
 });
 
 function createHarpVoice(masterDest) {
-  const v = buildSamplerVoice('harp', HARP_URLS, { attack: 0.01, release: 1.4 });
+  const v = buildSamplerVoice('harp', HARP_URLS, { attack: 0.01, release: 2.6 });
   if (masterDest) v.connect(masterDest);
   return v;
 }

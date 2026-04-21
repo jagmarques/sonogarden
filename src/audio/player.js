@@ -197,14 +197,20 @@ export async function playNoteSequence(ns, opts = {}) {
     const dur = Math.max(0.08, endSec - startSec);
     const vel = typeof n.velocity === 'number' ? Math.max(0.1, Math.min(1, n.velocity / 127)) : velocity;
     const absTime = base + startSec;
-    // Clamp pitch into the harp sampler's trustworthy octave range. Below C3 the sampler
-    // interpolates from distant samples and produces muddy low artefacts.
+    // Clamp pitch into the harp sampler's trustworthy octave range.
     let pitch = n.pitch;
     while (pitch < 48) pitch += 12;
     while (pitch > 84) pitch -= 12;
     try {
-      piano.synth.triggerAttackRelease(midiToFreq(pitch), dur, absTime, vel);
-      emitNote({ pitch, velocity: vel, duration: dur, atMs: Date.now() + startSec * 1000 });
+      // Mystical layering: root + perfect fifth (+7) + octave (+12) with decreasing velocity.
+      // Extended durations let the harp's natural sustain stack into sympathetic chords.
+      const longDur = dur + 1.6;
+      piano.synth.triggerAttackRelease(midiToFreq(pitch), longDur, absTime, vel);
+      piano.synth.triggerAttackRelease(midiToFreq(pitch + 7), longDur, absTime + 0.03, vel * 0.5);
+      if (pitch + 12 <= 84) {
+        piano.synth.triggerAttackRelease(midiToFreq(pitch + 12), longDur, absTime + 0.06, vel * 0.3);
+      }
+      emitNote({ pitch, velocity: vel, duration: longDur, atMs: Date.now() + startSec * 1000 });
       scheduled++;
     } catch (err) {
       debug('note trigger failed', err);

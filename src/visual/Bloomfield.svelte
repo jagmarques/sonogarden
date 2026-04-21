@@ -360,20 +360,20 @@
         if (centerInner) centerInner.material.color.copy(bgMat.uniforms.uAccent.value);
       }
       pointsMat.uniforms.uTime.value = t;
-      // Global slow rotation keeps the composition from looking frozen, but stays gentle.
-      scene.rotation.y = Math.sin(t * 0.04) * 0.25;
+      // Scene itself stays fixed; only the focal icosahedra rotate, and only the camera drifts
+      // subtly. No whole-scene rotation (reverted after user feedback that it felt unstable).
       if (centerpiece) {
-        centerpiece.rotation.x = t * 0.09;
-        centerpiece.rotation.y = t * 0.07;
+        centerpiece.rotation.x = t * 0.05;
+        centerpiece.rotation.y = t * 0.04;
       }
       if (centerInner) {
-        centerInner.rotation.x = -t * 0.13;
-        centerInner.rotation.z = t * 0.1;
+        centerInner.rotation.x = -t * 0.07;
+        centerInner.rotation.z = t * 0.05;
       }
-      camera.position.x = Math.sin(t * 0.06) * 1.8 + mouseSmoothed.x * 2.0;
-      camera.position.y = Math.sin(t * 0.05 + 1.2) * 0.9 + mouseSmoothed.y * 1.2;
-      camera.position.z = 14 + Math.sin(t * 0.03) * 1.0;
-      camera.lookAt(mouseSmoothed.x * 0.4, mouseSmoothed.y * 0.3, 0);
+      camera.position.x = Math.sin(t * 0.04) * 0.8 + mouseSmoothed.x * 1.5;
+      camera.position.y = Math.sin(t * 0.035 + 1.2) * 0.4 + mouseSmoothed.y * 0.9;
+      camera.position.z = 14;
+      camera.lookAt(mouseSmoothed.x * 0.3, mouseSmoothed.y * 0.2, 0);
       stepAmbient(t);
       renderer.clear();
       renderer.render(bgScene, bgCam);
