@@ -235,8 +235,9 @@
     const count = edges.attributes.position.count;
     const rand = new Float32Array(count * 3);
     const phase = new Float32Array(count);
-    // Paired vertices (each line segment) share the same phase so edges break as a whole,
-    // not as disconnected endpoints.
+    // Per line segment, ONE endpoint stays anchored (zero displacement) and the OTHER
+    // floats on a random direction. Each edge breaks on one end while the other remains
+    // attached to the rest of the shape, so the wireframe never fully disconnects.
     for (let i = 0; i < count; i += 2) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
@@ -244,8 +245,14 @@
       const ry = Math.sin(phi) * Math.sin(theta);
       const rz = Math.cos(phi);
       const p = Math.random();
-      rand[i * 3 + 0] = rx; rand[i * 3 + 1] = ry; rand[i * 3 + 2] = rz;
-      rand[(i + 1) * 3 + 0] = rx; rand[(i + 1) * 3 + 1] = ry; rand[(i + 1) * 3 + 2] = rz;
+      const anchorFirst = Math.random() < 0.5;
+      if (anchorFirst) {
+        rand[i * 3 + 0] = 0; rand[i * 3 + 1] = 0; rand[i * 3 + 2] = 0;
+        rand[(i + 1) * 3 + 0] = rx; rand[(i + 1) * 3 + 1] = ry; rand[(i + 1) * 3 + 2] = rz;
+      } else {
+        rand[i * 3 + 0] = rx; rand[i * 3 + 1] = ry; rand[i * 3 + 2] = rz;
+        rand[(i + 1) * 3 + 0] = 0; rand[(i + 1) * 3 + 1] = 0; rand[(i + 1) * 3 + 2] = 0;
+      }
       phase[i] = p;
       phase[i + 1] = p;
     }
