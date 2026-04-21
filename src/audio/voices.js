@@ -42,7 +42,11 @@ function buildSamplerVoice(name, urls, opts = {}) {
 
 // Sparse 4-6 sample maps; Tone.Sampler interpolates. Filenames verified against the live CDN.
 const HARP_URLS = Object.freeze({ C3: 'C3.mp3', G3: 'G3.mp3', C5: 'C5.mp3', G5: 'G5.mp3', D6: 'D6.mp3' });
-const PIANO_URLS = Object.freeze({ C3: 'C3.mp3', G3: 'G3.mp3', C4: 'C4.mp3', G4: 'G4.mp3', C5: 'C5.mp3' });
+const PIANO_URLS = Object.freeze({
+  A2: 'A2.mp3', C3: 'C3.mp3', E3: 'E3.mp3', G3: 'G3.mp3',
+  C4: 'C4.mp3', E4: 'E4.mp3', G4: 'G4.mp3',
+  C5: 'C5.mp3', E5: 'E5.mp3', G5: 'G5.mp3',
+});
 const CELLO_URLS = Object.freeze({ C2: 'C2.mp3', G2: 'G2.mp3', C3: 'C3.mp3', G3: 'G3.mp3', C4: 'C4.mp3' });
 const HARMONIUM_URLS = Object.freeze({ C2: 'C2.mp3', C3: 'C3.mp3', G3: 'G3.mp3', C4: 'C4.mp3' });
 const CONTRABASS_URLS = Object.freeze({ G1: 'G1.mp3', C2: 'C2.mp3', E2: 'E2.mp3', A2: 'A2.mp3', E3: 'E3.mp3' });
@@ -57,8 +61,7 @@ function make(name, urls, opts, dest) {
 
 export function buildAllVoices(destinationNode) {
   const harp = make('harp', HARP_URLS, { attack: 0.01, release: 2.6, gain: 0.55 }, destinationNode);
-  // Felt-piano: soft attack + long release.
-  const piano = make('piano', PIANO_URLS, { attack: 0.06, release: 3.5, gain: 0.5 }, destinationNode);
+  const piano = make('piano', PIANO_URLS, { attack: 0.005, release: 1.8, gain: 0.5 }, destinationNode);
   const cello = make('cello', CELLO_URLS, { attack: 0.25, release: 3.0, gain: 0.42 }, destinationNode);
   const harmonium = make('harmonium', HARMONIUM_URLS, { attack: 0.25, release: 2.2, gain: 0.22 }, destinationNode);
   const contrabass = make('contrabass', CONTRABASS_URLS, { attack: 0.2, release: 2.4, gain: 0.4 }, destinationNode);
@@ -82,6 +85,3 @@ export function buildAllVoices(destinationNode) {
     },
   };
 }
-
-export function resolveInstrumentKeyForSeed() { return 'harp'; }
-export function scaleTranspose() { return 0; }
