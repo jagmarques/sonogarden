@@ -30,8 +30,8 @@
   let centerInner = null;
   let connLines = null;
   let connPosAttr = null;
-  const MAX_CONNECTIONS = 200;
-  const CONNECTION_DIST = 4.5;
+  const MAX_CONNECTIONS = 60;
+  const CONNECTION_DIST = 3.6;
   let clickGrowth = 0;
   let clickPulseEnds = 0;
   // Geometry morphing: shape A fades out, shape B fades in on schedule or click.
@@ -40,7 +40,11 @@
   let nextAutoMorphAt = 0;
   let morphPending = false;
   const connPairs = new Map();
-  const CONN_STICK_MS = 900;
+  const CONN_STICK_MS = 2500;
+  // Pointer-drag rotates the scene 360 degrees around.
+  let dragActive = false;
+  let dragPrevX = 0, dragPrevY = 0;
+  let sceneYaw = 0, scenePitch = 0;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -475,8 +479,17 @@
       mouse.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
       mouse.y = -(((ev.clientY - r.top) / r.height) * 2 - 1);
       mouse.active = true;
+      if (dragActive) {
+        const dx = ev.clientX - dragPrevX;
+        const dy = ev.clientY - dragPrevY;
+        sceneYaw += dx * 0.01;
+        scenePitch = Math.max(-1.2, Math.min(1.2, scenePitch + dy * 0.008));
+        dragPrevX = ev.clientX;
+        dragPrevY = ev.clientY;
+      }
     };
-    const onPointerLeave = () => { mouse.active = false; };
+    const onPointerLeave = () => { mouse.active = false; dragActive = false; };
+    const onPointerUp = () => { dragActive = false; };
     const onPointerDown = (ev) => {
       const r = hostEl.getBoundingClientRect();
       const nx = ((ev.clientX - r.left) / r.width) * 2 - 1;
@@ -489,15 +502,22 @@
       clickGrowth = Math.min(0.8, clickGrowth + 0.08);
       clickPulseEnds = performance.now() / 1000 + 0.6;
       triggerMorph();
+      dragActive = true;
+      dragPrevX = ev.clientX;
+      dragPrevY = ev.clientY;
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerleave', onPointerLeave);
     window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     window.addEventListener('resize', resize);
     hostEl.__cleanupPointers = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerleave', onPointerLeave);
       window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
     };
 
     const loop = () => {
@@ -537,6 +557,9 @@
       camera.position.y = Math.sin(t * 0.035 + 1.2) * 0.4 + mouseSmoothed.y * 0.9;
       camera.position.z = 14;
       camera.lookAt(mouseSmoothed.x * 0.3, mouseSmoothed.y * 0.2, 0);
+      // Drag-driven scene rotation so the user can look around the geometry 360 degrees.
+      scene.rotation.y = sceneYaw;
+      scene.rotation.x = scenePitch;
       stepAmbient(t);
       // Update orb-to-orb connecting lines each frame. Only visible orbs pair up.
       if (connPosAttr && posAttr) {
