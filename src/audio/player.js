@@ -10,7 +10,11 @@ const DEBUG = false;
 const MASTER_LIMITER_THRESHOLD_DB = -3;
 const MASTER_GAIN_DB = 0;
 const DEFAULT_QPM = 80;
+const DRONE_GAIN_DB = -44;
 const MELODY_GAIN_DB = 0;
+const DROP_DB_ON_NOTE = -3;
+const DUCK_ATTACK = 0.04;
+const DUCK_RELEASE = 0.6;
 
 let _sourceGain = null;
 let _masterGain = null;
@@ -324,6 +328,11 @@ export async function triggerVoice(voiceKey, pitch, velocity = 0.5, duration = 2
   } catch (err) {
     debug('triggerVoice failed', err);
   }
+}
+
+// Backwards-compatible: trigger on the harp specifically.
+export async function triggerHarp(pitch, velocity = 0.5, duration = 2.5, atTime = null) {
+  return triggerVoice('harp', pitch, velocity, duration, atTime);
 }
 
 // Plays a MusicVAE INoteSequence. Start times are in seconds at the sequence's qpm.
