@@ -4,6 +4,7 @@
   // and follows the mouse. Orbs spawn on real note events and drift outward.
 
   import * as THREE from 'three';
+  import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
   import { onNote } from '../audio/events.js';
 
   let { mood = null } = $props();
@@ -34,11 +35,12 @@
   let clickGrowth = 0;
   let clickPulseEnds = 0;
   // Geometry morphing: shape A fades out, shape B fades in on schedule or click.
-  const SHAPES = ['icosahedron', 'dodecahedron', 'octahedron', 'tetrahedron', 'torusKnot'];
-  let currentShape = 0;
-  let targetShape = 0;
+  // Shape identity no longer matters: every morph builds a fresh random convex polyhedron.
   let morphPhase = 1;
   let nextAutoMorphAt = 0;
+  let morphPending = false;
+  const connPairs = new Map();
+  const CONN_STICK_MS = 900;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -209,12 +211,20 @@
   `;
 
   function buildShapeGeom(kind, size) {
-    let g;
-    if (kind === 'dodecahedron') g = new THREE.DodecahedronGeometry(size, 0);
-    else if (kind === 'octahedron') g = new THREE.OctahedronGeometry(size, 0);
-    else if (kind === 'tetrahedron') g = new THREE.TetrahedronGeometry(size, 0);
-    else if (kind === 'torusKnot') g = new THREE.TorusKnotGeometry(size * 0.7, size * 0.18, 60, 8);
-    else g = new THREE.IcosahedronGeometry(size, 1);
+    // Random convex polyhedron from 7-14 points on a jittered sphere. Every call is unique.
+    const n = 7 + Math.floor(Math.random() * 8);
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1);
+      const r = size * (0.8 + Math.random() * 0.4);
+      pts.push(new THREE.Vector3(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.sin(phi) * Math.sin(theta),
+        r * Math.cos(phi),
+      ));
+    }
+    const g = new ConvexGeometry(pts);
     const edges = new THREE.EdgesGeometry(g);
     g.dispose();
     const count = edges.attributes.position.count;
@@ -256,7 +266,7 @@
 
   function triggerMorph() {
     if (morphPhase < 1) return;
-    targetShape = (currentShape + 1) % SHAPES.length;
+    morphPending = true;
     morphPhase = 0;
   }
 
@@ -270,21 +280,19 @@
       if (centerInner) centerInner.material.uniforms.uMorph.value = 0;
       return;
     }
-    // Slower morph (~3.3 s) so the break-reassemble reads as deliberate.
     morphPhase = Math.min(1, morphPhase + dt * 0.3);
     if (centerpiece) centerpiece.material.uniforms.uMorph.value = morphPhase;
     if (centerInner) centerInner.material.uniforms.uMorph.value = morphPhase;
-    // Swap geometry at the peak of the explosion so the reform lands as a new shape.
-    if (morphPhase >= 0.5 && currentShape !== targetShape) {
+    if (morphPhase >= 0.5 && morphPending) {
       if (centerpiece) {
         centerpiece.geometry.dispose();
-        centerpiece.geometry = buildShapeGeom(SHAPES[targetShape], 3.2);
+        centerpiece.geometry = buildShapeGeom('', 3.2);
       }
       if (centerInner) {
         centerInner.geometry.dispose();
-        centerInner.geometry = buildShapeGeom(SHAPES[targetShape], 1.6);
+        centerInner.geometry = buildShapeGeom('', 1.6);
       }
-      currentShape = targetShape;
+      morphPending = false;
     }
   }
 
@@ -433,12 +441,12 @@
     // Central morphing wireframe: each vertex drifts on a random direction per break/reform cycle.
     const icoMat = buildShapeMaterial(0.3);
     icoMat.uniforms.uColor.value.copy(accentVec3(moodRef));
-    centerpiece = new THREE.LineSegments(buildShapeGeom(SHAPES[0], 3.2), icoMat);
+    centerpiece = new THREE.LineSegments(buildShapeGeom('', 3.2), icoMat);
     scene.add(centerpiece);
 
     const inMat = buildShapeMaterial(0.45);
     inMat.uniforms.uColor.value.copy(accentVec3(moodRef));
-    centerInner = new THREE.LineSegments(buildShapeGeom(SHAPES[0], 1.6), inMat);
+    centerInner = new THREE.LineSegments(buildShapeGeom('', 1.6), inMat);
     scene.add(centerInner);
 
     nextAutoMorphAt = performance.now() / 1000 + 22;
@@ -530,33 +538,51 @@
       stepAmbient(t);
       // Update orb-to-orb connecting lines each frame. Only visible orbs pair up.
       if (connPosAttr && posAttr) {
+        // Sticky pairing: once a pair links it stays for CONN_STICK_MS even after orbs drift
+        // beyond the threshold, so connections fade individually instead of all vanishing at once.
         const arr = connPosAttr.array;
         let pairs = 0;
+        const nowMs = performance.now();
         const thr2 = CONNECTION_DIST * CONNECTION_DIST;
+        const extThr2 = (CONNECTION_DIST * 1.4) * (CONNECTION_DIST * 1.4);
+        // Refresh/extend stickiness for pairs within threshold.
         for (let i = 0; i < ORB_COUNT && pairs < MAX_CONNECTIONS; i++) {
           const ai = i * 3;
-          const iBorn = bornAttr.array[i];
-          const iLife = lifeAttr.array[i];
-          if (t - iBorn > iLife) continue;
+          if (t - bornAttr.array[i] > lifeAttr.array[i]) continue;
           const ax = posAttr.array[ai];
           const ay = posAttr.array[ai + 1];
           const az = posAttr.array[ai + 2];
-          for (let j = i + 1; j < ORB_COUNT && pairs < MAX_CONNECTIONS; j++) {
-            const jBorn = bornAttr.array[j];
-            const jLife = lifeAttr.array[j];
-            if (t - jBorn > jLife) continue;
+          for (let j = i + 1; j < ORB_COUNT; j++) {
+            if (t - bornAttr.array[j] > lifeAttr.array[j]) continue;
             const bi = j * 3;
             const dx = posAttr.array[bi] - ax;
             const dy = posAttr.array[bi + 1] - ay;
             const dz = posAttr.array[bi + 2] - az;
             const d2 = dx * dx + dy * dy + dz * dz;
+            const key = i * 256 + j;
+            const existing = connPairs.get(key);
             if (d2 < thr2) {
-              const o = pairs * 6;
-              arr[o] = ax; arr[o + 1] = ay; arr[o + 2] = az;
-              arr[o + 3] = posAttr.array[bi]; arr[o + 4] = posAttr.array[bi + 1]; arr[o + 5] = posAttr.array[bi + 2];
-              pairs++;
+              connPairs.set(key, nowMs);
+            } else if (existing && d2 > extThr2) {
+              connPairs.delete(key);
             }
           }
+        }
+        // Draw all currently sticky pairs; prune expired.
+        for (const [key, lastSeen] of connPairs) {
+          if (pairs >= MAX_CONNECTIONS) break;
+          if (nowMs - lastSeen > CONN_STICK_MS) { connPairs.delete(key); continue; }
+          const i = Math.floor(key / 256);
+          const j = key % 256;
+          if (t - bornAttr.array[i] > lifeAttr.array[i] || t - bornAttr.array[j] > lifeAttr.array[j]) {
+            connPairs.delete(key);
+            continue;
+          }
+          const ai = i * 3, bi = j * 3;
+          const o = pairs * 6;
+          arr[o]     = posAttr.array[ai];     arr[o + 1] = posAttr.array[ai + 1]; arr[o + 2] = posAttr.array[ai + 2];
+          arr[o + 3] = posAttr.array[bi];     arr[o + 4] = posAttr.array[bi + 1]; arr[o + 5] = posAttr.array[bi + 2];
+          pairs++;
         }
         connLines.geometry.setDrawRange(0, pairs * 2);
         connPosAttr.needsUpdate = true;
