@@ -112,8 +112,7 @@
     else showIntro = false;
   }
 
-  function handleActivityChange(e) {
-    activity = e.target.value;
+  function handleActivityChange() {
     setMood(activity);
     stopAll();
     onMoodChange().catch((err) => logError('onMoodChange failed', err));
@@ -339,7 +338,7 @@
   {/if}
 
   <div class="control-bar">
-    <select class="activity-select" aria-label="Activity" value={activity} onchange={handleActivityChange}>
+    <select class="activity-select" aria-label="Activity" bind:value={activity} onchange={handleActivityChange}>
       {#each Object.keys(MOODS) as key}
         <option value={key}>{MOODS[key].label}</option>
       {/each}
