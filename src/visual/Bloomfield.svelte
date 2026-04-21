@@ -76,11 +76,27 @@
       return v;
     }
 
+    // Twinkling star field: deterministic grid cells, each cell has one bright pixel that
+    // fades in and out on its own phase for a magical starlit feel.
+    float stars(vec2 uv, float t) {
+      vec2 g = uv * 120.0;
+      vec2 id = floor(g);
+      vec2 f = fract(g);
+      float rnd = hash(id);
+      float phase = rnd * 6.2831 + t * (0.4 + rnd);
+      float twinkle = 0.5 + 0.5 * sin(phase);
+      float presence = step(0.985, rnd);
+      vec2 c = f - 0.5;
+      float pt = smoothstep(0.06, 0.0, length(c));
+      return presence * pt * twinkle;
+    }
+
     void main() {
       vec2 uv = vUv;
       float gradient = smoothstep(1.0, 0.0, uv.y);
       float haze = fbm(uv * 3.0 + vec2(0.0, uTime * 0.015));
       vec3 col = mix(uDeep, uAccent * 0.35, gradient * (0.4 + 0.4 * haze));
+      col += uAccent * stars(uv, uTime) * 0.9;
       float vignette = smoothstep(1.2, 0.5, length(uv - 0.5));
       col *= mix(0.5, 1.0, vignette);
       gl_FragColor = vec4(col, 1.0);
@@ -166,6 +182,27 @@
     return new THREE.Color(0x05080E);
   }
 
+  // Wireframe shader that supports break-and-reassemble morphing: each vertex drifts along a
+  // random unit direction, amplitude peaks at the midpoint and returns to rest. Geometry is
+  // swapped underneath at the peak so the pieces re-form as a different polyhedron.
+  const shapeVertex = `
+    attribute vec3 aRand;
+    uniform float uMorph;
+    uniform float uClick;
+    void main() {
+      float explode = sin(uMorph * 3.14159265);
+      vec3 disp = aRand * (explode * 2.4 + uClick * 0.6);
+      vec3 p = position + disp;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `;
+  const shapeFragment = `
+    precision highp float;
+    uniform vec3 uColor;
+    uniform float uOpacity;
+    void main() { gl_FragColor = vec4(uColor, uOpacity); }
+  `;
+
   function buildShapeGeom(kind, size) {
     let g;
     if (kind === 'dodecahedron') g = new THREE.DodecahedronGeometry(size, 0);
@@ -175,7 +212,32 @@
     else g = new THREE.IcosahedronGeometry(size, 1);
     const edges = new THREE.EdgesGeometry(g);
     g.dispose();
+    const count = edges.attributes.position.count;
+    const rand = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1);
+      rand[i * 3 + 0] = Math.sin(phi) * Math.cos(theta);
+      rand[i * 3 + 1] = Math.sin(phi) * Math.sin(theta);
+      rand[i * 3 + 2] = Math.cos(phi);
+    }
+    edges.setAttribute('aRand', new THREE.BufferAttribute(rand, 3));
     return edges;
+  }
+
+  function buildShapeMaterial(opacity) {
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      vertexShader: shapeVertex,
+      fragmentShader: shapeFragment,
+      uniforms: {
+        uMorph: { value: 0 },
+        uClick: { value: 0 },
+        uColor: { value: new THREE.Color() },
+        uOpacity: { value: opacity },
+      },
+    });
   }
 
   function triggerMorph() {
@@ -190,14 +252,16 @@
         triggerMorph();
         nextAutoMorphAt = performance.now() / 1000 + 25 + Math.random() * 10;
       }
+      if (centerpiece) centerpiece.material.uniforms.uMorph.value = 0;
+      if (centerInner) centerInner.material.uniforms.uMorph.value = 0;
       return;
     }
-    morphPhase = Math.min(1, morphPhase + dt * 0.5);
-    const half = 0.5;
-    const shrink = morphPhase < half ? 1 - morphPhase / half : (morphPhase - half) / (1 - half);
-    if (centerpiece) centerpiece.scale.setScalar((1 + clickGrowth) * shrink);
-    if (centerInner) centerInner.scale.setScalar((1 + clickGrowth) * shrink);
-    if (morphPhase >= half && currentShape !== targetShape) {
+    // Slower morph (~3.3 s) so the break-reassemble reads as deliberate.
+    morphPhase = Math.min(1, morphPhase + dt * 0.3);
+    if (centerpiece) centerpiece.material.uniforms.uMorph.value = morphPhase;
+    if (centerInner) centerInner.material.uniforms.uMorph.value = morphPhase;
+    // Swap geometry at the peak of the explosion so the reform lands as a new shape.
+    if (morphPhase >= 0.5 && currentShape !== targetShape) {
       if (centerpiece) {
         centerpiece.geometry.dispose();
         centerpiece.geometry = buildShapeGeom(SHAPES[targetShape], 3.2);
@@ -352,18 +416,18 @@
     // Atmospheric fog so distant orbs fade gently. Gives a sense of depth.
     scene.fog = new THREE.FogExp2(0x000000, 0.04);
 
-    // Central slowly-morphing wireframe shape. Auto-cycles through 5 polyhedra; click advances.
-    const icoMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.22 });
-    icoMat.color = accentVec3(moodRef);
+    // Central morphing wireframe: each vertex drifts on a random direction per break/reform cycle.
+    const icoMat = buildShapeMaterial(0.3);
+    icoMat.uniforms.uColor.value.copy(accentVec3(moodRef));
     centerpiece = new THREE.LineSegments(buildShapeGeom(SHAPES[0], 3.2), icoMat);
     scene.add(centerpiece);
 
-    const inMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.35 });
-    inMat.color = accentVec3(moodRef);
+    const inMat = buildShapeMaterial(0.45);
+    inMat.uniforms.uColor.value.copy(accentVec3(moodRef));
     centerInner = new THREE.LineSegments(buildShapeGeom(SHAPES[0], 1.6), inMat);
     scene.add(centerInner);
 
-    nextAutoMorphAt = performance.now() / 1000 + 25;
+    nextAutoMorphAt = performance.now() / 1000 + 22;
 
     // Connecting lines between nearby orbs (particles.js-style). Position buffer is rewritten
     // every frame from the current live orb positions.
@@ -424,24 +488,26 @@
         bgMat.uniforms.uAccent.value.lerp(accentVec3(moodRef), 0.12);
         bgMat.uniforms.uDeep.value.lerp(deepVec3(moodRef), 0.12);
         pointsMat.uniforms.uAccent.value.copy(bgMat.uniforms.uAccent.value);
-        if (centerpiece) centerpiece.material.color.copy(bgMat.uniforms.uAccent.value);
-        if (centerInner) centerInner.material.color.copy(bgMat.uniforms.uAccent.value);
+        if (centerpiece) centerpiece.material.uniforms.uColor.value.copy(bgMat.uniforms.uAccent.value);
+        if (centerInner) centerInner.material.uniforms.uColor.value.copy(bgMat.uniforms.uAccent.value);
       }
       pointsMat.uniforms.uTime.value = t;
       const nowSec = performance.now() / 1000;
       const pulse = Math.max(0, clickPulseEnds - nowSec);
       stepMorph(dt);
+      // Click pushes vertices outward too, via uClick uniform. Decays back to zero.
       if (centerpiece) {
         centerpiece.rotation.x = t * 0.05;
         centerpiece.rotation.y = t * 0.04;
+        centerpiece.material.uniforms.uClick.value = pulse;
+        centerpiece.scale.setScalar(1 + clickGrowth);
       }
       if (centerInner) {
         centerInner.rotation.x = -t * 0.07;
         centerInner.rotation.z = t * 0.05;
+        centerInner.material.uniforms.uClick.value = pulse;
+        centerInner.scale.setScalar(1 + clickGrowth);
       }
-      // Apply pulse on top of whatever stepMorph set.
-      if (morphPhase >= 1 && centerpiece) centerpiece.scale.setScalar((1 + clickGrowth) * (1 + pulse * 0.4));
-      if (morphPhase >= 1 && centerInner) centerInner.scale.setScalar((1 + clickGrowth) * (1 + pulse * 0.6));
       clickGrowth *= 0.998;
       camera.position.x = Math.sin(t * 0.04) * 0.8 + mouseSmoothed.x * 1.5;
       camera.position.y = Math.sin(t * 0.035 + 1.2) * 0.4 + mouseSmoothed.y * 0.9;
