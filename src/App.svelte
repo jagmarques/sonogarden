@@ -108,8 +108,7 @@
   function handleUnlock() {
     if (_unlockAttempted) return;
     _unlockAttempted = true;
-    // iOS Safari will only resume an AudioContext when .resume() is called SYNCHRONOUSLY
-    // inside the user-gesture frame. No awaits, no promise chains before this call.
+    // iOS requires resume() called synchronously in the gesture frame, no awaits before it.
     try {
       const raw = Tone.getContext().rawContext;
       if (raw && raw.state !== 'running' && typeof raw.resume === 'function') {
@@ -119,7 +118,7 @@
     audioUnlocked = true;
     tuningInstruments = false;
     samplePercent = 100;
-    // Now run the full Tone init chain async. The context is already resuming from above.
+    // Tone init runs async; context already resuming from the sync call above.
     initAudio()
       .then(() => {
         setMood(activity);

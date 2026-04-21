@@ -130,9 +130,7 @@ function contextRunning() {
   try { return Tone.getContext().state === 'running'; } catch (_) { return false; }
 }
 
-// iOS Safari silent-buffer unlock: some iOS versions leave the AudioContext stuck in "suspended"
-// even after Tone.start() resolves. Playing a zero-length buffer inside the gesture chain
-// commits the unlock reliably across iOS 13+ and iPadOS.
+// iOS silent-buffer unlock; commits ctx resume even when Tone.start() reports running.
 function unlockIOSAudio() {
   try {
     const ctx = Tone.getContext().rawContext;
@@ -147,9 +145,7 @@ function unlockIOSAudio() {
   } catch (_) { /* ignore */ }
 }
 
-// iOS 17.5+ ships navigator.audioSession. Setting type='playback' routes Web Audio through the
-// "media" channel instead of the default "ambient" channel, which unmutes output when the
-// hardware silent switch is on. SOURCE: WebKit bug 237322 (Jean-Yves Avenard), bug 261554.
+// iOS 17.5+: route Web Audio through media channel so silent slider does not mute. WebKit 237322.
 function setIOSAudioSessionPlayback() {
   try {
     if (typeof navigator !== 'undefined' && 'audioSession' in navigator) {
@@ -158,8 +154,7 @@ function setIOSAudioSessionPlayback() {
   } catch (_) { /* ignore */ }
 }
 
-// Builds a real 0.5s silent 8kHz mono 8-bit PCM WAV blob. Must contain actual samples;
-// a 0-byte data chunk is refused by iOS Safari. 8-bit PCM is unsigned with 128 = silence.
+// 0.5s silent 8kHz mono 8-bit PCM blob. iOS rejects 0-sample WAVs.
 function buildSilentWavBlob() {
   const rate = 8000;
   const samples = rate / 2;
@@ -183,9 +178,7 @@ function buildSilentWavBlob() {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
-// Silent-audio-element fallback for iOS < 17.5 where navigator.audioSession is absent.
-// Keeps the "media" route open by continuously playing a hidden silent WAV loop.
-// SOURCE: github.com/swevans/unmute, github.com/feross/unmute-ios-audio, Tone.js issue #909.
+// iOS < 17.5 fallback: hidden silent WAV keeps the media route open. swevans/unmute trick.
 let _silentAudioEl = null;
 function startSilentAudioKeepalive() {
   try {
@@ -213,8 +206,7 @@ function startSilentAudioKeepalive() {
 
 async function realStart() {
   if (_started && contextRunning()) return;
-  // All of these are synchronous and MUST run before the first await so iOS Safari
-  // processes them inside the user-gesture frame.
+  // Synchronous calls must run before any await so iOS keeps user-gesture activation.
   setIOSAudioSessionPlayback();
   startSilentAudioKeepalive();
   unlockIOSAudio();
