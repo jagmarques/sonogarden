@@ -35,8 +35,8 @@ export const MOODS = {
   },
   meditate: {
     label: 'meditate',
-    tonic: 61,
-    scale: 'major',
+    tonic: 55,
+    scale: 'minor',
     reverbDecay: 9.0,
     reverbWet: 0.7,
     delayTime: 0.55,
