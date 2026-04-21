@@ -42,6 +42,16 @@
       <button type="button" onclick="location.reload()">reload</button>
     </div>
     <script>
+      // iOS 17.5+ routing: set audioSession BEFORE Tone creates its AudioContext.
+      // If set after context creation, the already-routed context stays on the
+      // "ambient" channel (which the silent slider mutes). SOURCE: WebKit bug 237322.
+      try {
+        if (typeof navigator !== 'undefined' && 'audioSession' in navigator) {
+          navigator.audioSession.type = 'playback';
+        }
+      } catch (_) { /* ignore */ }
+    </script>
+    <script>
       // Visible boot-error catch so mobile issues surface instead of a blank page.
       (function () {
         function show(msg) {
