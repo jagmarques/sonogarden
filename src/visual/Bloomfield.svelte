@@ -187,11 +187,16 @@
   // swapped underneath at the peak so the pieces re-form as a different polyhedron.
   const shapeVertex = `
     attribute vec3 aRand;
+    attribute float aPhase;
     uniform float uMorph;
     uniform float uClick;
     void main() {
-      float explode = sin(uMorph * 3.14159265);
-      vec3 disp = aRand * (explode * 2.4 + uClick * 0.6);
+      // Each edge breaks on its own schedule. aPhase in [0,1] spreads the break window so
+      // pieces scatter progressively rather than all at once.
+      float start = aPhase * 0.55;
+      float local = clamp((uMorph - start) / 0.45, 0.0, 1.0);
+      float explode = sin(local * 3.14159265);
+      vec3 disp = aRand * (explode * 2.6 + uClick * 0.6);
       vec3 p = position + disp;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }
@@ -214,14 +219,23 @@
     g.dispose();
     const count = edges.attributes.position.count;
     const rand = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
+    const phase = new Float32Array(count);
+    // Paired vertices (each line segment) share the same phase so edges break as a whole,
+    // not as disconnected endpoints.
+    for (let i = 0; i < count; i += 2) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
-      rand[i * 3 + 0] = Math.sin(phi) * Math.cos(theta);
-      rand[i * 3 + 1] = Math.sin(phi) * Math.sin(theta);
-      rand[i * 3 + 2] = Math.cos(phi);
+      const rx = Math.sin(phi) * Math.cos(theta);
+      const ry = Math.sin(phi) * Math.sin(theta);
+      const rz = Math.cos(phi);
+      const p = Math.random();
+      rand[i * 3 + 0] = rx; rand[i * 3 + 1] = ry; rand[i * 3 + 2] = rz;
+      rand[(i + 1) * 3 + 0] = rx; rand[(i + 1) * 3 + 1] = ry; rand[(i + 1) * 3 + 2] = rz;
+      phase[i] = p;
+      phase[i + 1] = p;
     }
     edges.setAttribute('aRand', new THREE.BufferAttribute(rand, 3));
+    edges.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
     return edges;
   }
 
