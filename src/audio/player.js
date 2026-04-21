@@ -122,9 +122,28 @@ function contextRunning() {
   try { return Tone.getContext().state === 'running'; } catch (_) { return false; }
 }
 
+// iOS Safari silent-buffer unlock: some iOS versions leave the AudioContext stuck in "suspended"
+// even after Tone.start() resolves. Playing a zero-length buffer inside the gesture chain
+// commits the unlock reliably across iOS 13+ and iPadOS.
+function unlockIOSAudio() {
+  try {
+    const ctx = Tone.getContext().rawContext;
+    if (!ctx) return;
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, 22050);
+    src.connect(ctx.destination);
+    if (typeof src.start === 'function') src.start(0);
+    if (ctx.state !== 'running' && typeof ctx.resume === 'function') {
+      ctx.resume().catch(() => { /* ignore */ });
+    }
+  } catch (_) { /* ignore */ }
+}
+
 async function realStart() {
   if (_started && contextRunning()) return;
+  unlockIOSAudio();
   await Tone.start();
+  unlockIOSAudio();
   ensureMasterChain();
   ensureVoices();
 
