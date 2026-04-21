@@ -74,6 +74,13 @@ function ensurePadSynth() {
   return _padSynth;
 }
 
+// Lets setMood update pad volume from the mood descriptor.
+export function setPadVolume(db) {
+  if (_padSynth && typeof db === 'number') {
+    try { _padSynth.volume.rampTo(db, 1.2); } catch (_) { /* ignore */ }
+  }
+}
+
 function ensureNoise() {
   if (_noise) return;
   const dest = getMelodyBus();

@@ -4,6 +4,7 @@ import * as Tone from 'tone';
 import { buildAllVoices } from './voices.js';
 import { MOODS, setCurrentMood, getCurrentMood } from './moods.js';
 import { emitNote } from './events.js';
+import { setPadVolume } from './ambient.js';
 
 const DEBUG = false;
 const MASTER_LIMITER_THRESHOLD_DB = -3;
@@ -194,6 +195,9 @@ export function setMood(name) {
     try { _delay.delayTime.rampTo(m.delayTime ?? 0.4, 0.8); } catch (_) { /* ignore */ }
     try { _delay.feedback.rampTo(m.delayFeedback ?? 0.3, 0.8); } catch (_) { /* ignore */ }
     try { _delay.wet.rampTo(m.delayWet ?? 0.2, 0.8); } catch (_) { /* ignore */ }
+  }
+  if (typeof m.padVolumeDb === 'number') {
+    try { setPadVolume(m.padVolumeDb); } catch (_) { /* ignore */ }
   }
   return m;
 }
