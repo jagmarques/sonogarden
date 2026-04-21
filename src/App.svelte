@@ -342,11 +342,18 @@
   {/if}
 
   <div class="control-bar">
-    <select class="activity-select" aria-label="Activity" value={activity} onchange={(e) => applyMood(e.currentTarget.value)}>
+    <div class="mood-row" role="radiogroup" aria-label="mood">
       {#each Object.keys(MOODS) as key}
-        <option value={key}>{MOODS[key].label}</option>
+        <button
+          type="button"
+          class="mood-pill"
+          class:active={activity === key}
+          role="radio"
+          aria-checked={activity === key}
+          onclick={() => applyMood(key)}
+        >{MOODS[key].label}</button>
       {/each}
-    </select>
+    </div>
     <button type="button" class="spawn-toggle" onclick={handleShare} title="copy a link to this exact moment">copy link</button>
     {#if shareFlash}
       <span class="share-flash" role="status" aria-live="polite">copied</span>
@@ -637,7 +644,37 @@
     gap: 8px;
     z-index: 55;
     pointer-events: auto;
-    max-width: 280px;
+    max-width: 360px;
+  }
+  .mood-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .mood-pill {
+    height: 32px;
+    padding: 0 14px;
+    background: color-mix(in srgb, #14191C 70%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
+    border-radius: 9999px;
+    color: color-mix(in srgb, #E8C9A0 70%, transparent);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-transform: lowercase;
+    letter-spacing: -0.005em;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+  .mood-pill:hover, .mood-pill:focus-visible {
+    color: var(--iris);
+    border-color: var(--iris);
+  }
+  .mood-pill.active {
+    color: #0B0F12;
+    background: #E8C9A0;
+    border-color: #E8C9A0;
   }
   .control-bar select,
   .control-bar .spawn-toggle {
