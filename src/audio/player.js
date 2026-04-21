@@ -168,6 +168,30 @@ function midiToFreq(pitch) {
 export function startDrone() { /* no drone in the calm build */ }
 export function stopDrone() { /* no drone */ }
 
+// Trigger a single harp note. Shared entry point for the ambient engine.
+export async function triggerHarp(pitch, velocity = 0.5, duration = 2.5, atTime = null) {
+  await initAudio();
+  if (!contextRunning()) return;
+  const voices = ensureVoices();
+  const piano = voices.piano;
+  if (!piano) return;
+  let p = pitch;
+  while (p < 48) p += 12;
+  while (p > 84) p -= 12;
+  const when = typeof atTime === 'number' ? atTime : Tone.now() + 0.02;
+  try {
+    piano.synth.triggerAttackRelease(midiToFreq(p), duration, when, velocity);
+    emitNote({ pitch: p, velocity, duration, atMs: Date.now() });
+    if (typeof window !== 'undefined') {
+      window.__sonoStats = window.__sonoStats || { notes: 0, plays: 0, drones: 0 };
+      window.__sonoStats.notes += 1;
+      window.__sonoStats.lastAt = Date.now();
+    }
+  } catch (err) {
+    debug('triggerHarp failed', err);
+  }
+}
+
 // Plays a MusicVAE INoteSequence. Start times are in seconds at the sequence's qpm.
 export async function playNoteSequence(ns, opts = {}) {
   if (!ns || !Array.isArray(ns.notes) || ns.notes.length === 0) return null;
@@ -202,13 +226,8 @@ export async function playNoteSequence(ns, opts = {}) {
     while (pitch < 48) pitch += 12;
     while (pitch > 84) pitch -= 12;
     try {
-      // Only harmonise a minority of notes so phrases stay varied. Root always plays.
-      const longDur = dur + 1.4;
-      piano.synth.triggerAttackRelease(midiToFreq(pitch), longDur, absTime, vel);
-      if (Math.random() < 0.2 && pitch + 7 <= 84) {
-        piano.synth.triggerAttackRelease(midiToFreq(pitch + 7), longDur, absTime + 0.04, vel * 0.4);
-      }
-      emitNote({ pitch, velocity: vel, duration: longDur, atMs: Date.now() + startSec * 1000 });
+      piano.synth.triggerAttackRelease(midiToFreq(pitch), dur, absTime, vel);
+      emitNote({ pitch, velocity: vel, duration: dur, atMs: Date.now() + startSec * 1000 });
       scheduled++;
     } catch (err) {
       debug('note trigger failed', err);
