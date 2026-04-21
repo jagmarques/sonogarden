@@ -48,6 +48,11 @@
   let camZoom = 14;
   const CAM_Z_MIN = 6;
   const CAM_Z_MAX = 26;
+  let orbitRing = null;
+  let orbitRing2 = null;
+  let satellites = null;
+  let satMat = null;
+  const SAT_COUNT = 6;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -467,6 +472,42 @@
 
     nextAutoMorphAt = performance.now() / 1000 + 22;
 
+    // Two wireframe rings at different tilts orbit the centerpiece for extra 3D depth.
+    const ringGeom = new THREE.TorusGeometry(5.5, 0.03, 6, 96);
+    const ringEdges = new THREE.EdgesGeometry(ringGeom);
+    ringGeom.dispose();
+    const ringMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.25 });
+    ringMat.color = accentVec3(moodRef);
+    orbitRing = new THREE.LineSegments(ringEdges, ringMat);
+    orbitRing.rotation.x = Math.PI / 2.2;
+    scene.add(orbitRing);
+
+    const ring2Geom = new THREE.TorusGeometry(7.5, 0.02, 6, 96);
+    const ring2Edges = new THREE.EdgesGeometry(ring2Geom);
+    ring2Geom.dispose();
+    const ring2Mat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.16 });
+    ring2Mat.color = accentVec3(moodRef);
+    orbitRing2 = new THREE.LineSegments(ring2Edges, ring2Mat);
+    orbitRing2.rotation.z = Math.PI / 3;
+    scene.add(orbitRing2);
+
+    // Six glowing satellite points orbiting the centerpiece on slightly tilted paths.
+    const satGeom = new THREE.BufferGeometry();
+    const satPos = new Float32Array(SAT_COUNT * 3);
+    for (let i = 0; i < SAT_COUNT; i++) { satPos[i * 3 + 1] = -99; }
+    satGeom.setAttribute('position', new THREE.BufferAttribute(satPos, 3));
+    satMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.28,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    satellites = new THREE.Points(satGeom, satMat);
+    scene.add(satellites);
+
     // Connecting lines between nearby orbs (particles.js-style). Position buffer is rewritten
     // every frame from the current live orb positions.
     const connGeom = new THREE.BufferGeometry();
@@ -556,6 +597,24 @@
         pointsMat.uniforms.uAccent.value.copy(bgMat.uniforms.uAccent.value);
         if (centerpiece) centerpiece.material.uniforms.uColor.value.copy(bgMat.uniforms.uAccent.value);
         if (centerInner) centerInner.material.uniforms.uColor.value.copy(bgMat.uniforms.uAccent.value);
+        if (orbitRing) orbitRing.material.color.copy(bgMat.uniforms.uAccent.value);
+        if (orbitRing2) orbitRing2.material.color.copy(bgMat.uniforms.uAccent.value);
+        if (satMat) satMat.color.copy(bgMat.uniforms.uAccent.value).lerp(new THREE.Color(0xffffff), 0.6);
+      }
+      if (orbitRing) { orbitRing.rotation.z = t * 0.05; orbitRing.rotation.y = t * 0.04; }
+      if (orbitRing2) { orbitRing2.rotation.x = -t * 0.07; orbitRing2.rotation.y = t * 0.03; }
+      if (satellites) {
+        const arr = satellites.geometry.attributes.position.array;
+        for (let i = 0; i < SAT_COUNT; i++) {
+          const phase = (i / SAT_COUNT) * Math.PI * 2;
+          const r = 4.8 + Math.sin(t * 0.3 + phase) * 0.5;
+          const yTilt = Math.sin(t * 0.4 + phase * 1.3) * 1.6;
+          arr[i * 3 + 0] = Math.cos(t * 0.22 + phase) * r;
+          arr[i * 3 + 1] = yTilt;
+          arr[i * 3 + 2] = Math.sin(t * 0.22 + phase) * r;
+        }
+        satellites.geometry.attributes.position.needsUpdate = true;
+        if (satMat) satMat.opacity = 0.7 + 0.3 * Math.sin(t * 2.0);
       }
       pointsMat.uniforms.uTime.value = t;
       const nowSec = performance.now() / 1000;
