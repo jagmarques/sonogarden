@@ -6,9 +6,9 @@ Live: https://jagmarques.github.io/sonogarden/
 
 ## Three moods
 
-- **focus**. C major, piano phrases over a quiet sine pad with rare harp shimmer. Short reverb tail, frequent phrases.
-- **meditate**. G minor, cello phrases over a harmonium drone with rare harp shimmer. Long reverb, slower chord drift.
-- **sleep**. C minor, soft piano phrases over a near-inaudible sine pad and pink-noise bed. Very sparse, longest gaps.
+- **Focus**: C major, piano phrases over a quiet sine pad with rare harp shimmer. Short reverb tail, frequent phrases.
+- **Meditate**: G minor, cello phrases over a harmonium drone with rare harp shimmer. Long reverb, slower chord drift.
+- **Sleep**: C minor, soft harp phrases over a near-inaudible sine pad and pink-noise bed. Very sparse, longest gaps.
 
 Each mood tunes tonic, scale, reverb decay/wet, delay time/feedback, pad volume, phrase cadence, chord change rate, and a distinct accent colour.
 
@@ -28,7 +28,7 @@ Per-mood voices selected from the [nbrosowsky/tonejs-instruments](https://github
 |---|---|---|---|
 | focus | piano | none | harp |
 | meditate | cello | harmonium | harp |
-| sleep | piano | none | none |
+| sleep | harp | none | none |
 
 Phrase shapes are 12 pre-written pentatonic templates with returns and suspensions, not random walks. Velocity follows an arch (soft, louder, soft) so each phrase reads as a musical figure rather than a chime.
 
