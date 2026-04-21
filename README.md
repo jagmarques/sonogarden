@@ -32,16 +32,6 @@ Per-mood voices selected from the [nbrosowsky/tonejs-instruments](https://github
 
 Phrase shapes are 12 pre-written pentatonic templates with returns and suspensions, not random walks. Velocity follows an arch (soft, louder, soft) so each phrase reads as a musical figure rather than a chime.
 
-## Mobile audio (iOS Safari)
-
-iOS routes Web Audio through the "ambient" channel by default, which the hardware silent slider mutes. Three measures keep audio playing through the silent switch:
-
-1. `navigator.audioSession.type = 'playback'` set in `index.html` before Tone creates its AudioContext (iOS 17.5+).
-2. Hidden silent-WAV `<audio playsinline loop>` keepalive started inside the unlock gesture (iOS 17.0-17.4 fallback).
-3. `rawContext.resume()` called synchronously in the `onclick` handler of the start overlay. Safari refuses to resume on `pointerdown` or `touchstart` because those events do not grant user activation per the HTML spec.
-
-Visit https://jagmarques.github.io/sonogarden/?debug=1 to see a small bottom-right diagnostic badge showing `Tone.getContext().state`, raw context state, sample rate, audio session type, sampler loaded, silent-keepalive active, note count, and time since last note.
-
 ## Visual field
 
 `src/visual/Bloomfield.svelte` renders a single three.js scene:
