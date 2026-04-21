@@ -320,12 +320,6 @@
 
   <MuteButton muted={muted} onchange={handleMuteChange} />
 
-  <div class="hud">
-    <span class="hud-item">{sessionMin}m</span>
-    <span class="hud-item">streak {gardenState.streak}</span>
-    <span class="hud-item">moments {gardenState.savedMoments.length}</span>
-  </div>
-
   {#if gardenState.saveFlash}
     <div class="save-flash" role="status" aria-live="polite">moment saved</div>
   {/if}
