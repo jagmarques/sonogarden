@@ -11,15 +11,18 @@
   const reduced = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  function unlock(e) {
+  // Safari WebKit only grants user activation on click, touchend, pointerup, keyup.
+  // pointerdown and touchstart do NOT qualify. AudioContext.resume() called inside a
+  // non-qualifying handler is silently refused. So we bind ONLY click here.
+  // SOURCE: https://html.spec.whatwg.org/multipage/interaction.html#tracking-user-activation
+  function unlock() {
     if (tuning) return;
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     onunlock();
   }
 
-  function onKey(e) {
+  function onKey() {
     if (tuning) return;
-    unlock(e);
+    unlock();
   }
 
   function triggerReload(e) {
@@ -38,8 +41,6 @@
   class:tuning
   aria-disabled={tuning}
   aria-label={tuning ? 'Tuning instruments' : 'Tap to wake the garden'}
-  onpointerdown={unlock}
-  ontouchstart={unlock}
   onclick={unlock}
 >
   <div class="inner">
