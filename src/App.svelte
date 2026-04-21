@@ -33,8 +33,6 @@
   let shareFlashTimer = null;
   let pendingSharedMelody = null;
   let chordLabel = $state('');
-  let listenSec = $state(0);
-  let listenTimer = null;
   let showIntro = $state(false);
   let introSlide = $state(0);
   let chordPollTimer = null;
@@ -130,8 +128,6 @@
       })
       .catch((err) => logError('initAudio failed', err));
     startSessionTimer();
-    if (listenTimer) clearInterval(listenTimer);
-    listenTimer = setInterval(() => { listenSec += 1; }, 1000);
     if (chordPollTimer) clearInterval(chordPollTimer);
     chordPollTimer = setInterval(() => {
       const lbl = getCurrentChordLabel();
@@ -273,7 +269,6 @@
 
   function handleBeforeUnload() {
     try { stopAutoplay(); stopAll(); } catch (_) { /* ignore */ }
-    if (listenTimer) { clearInterval(listenTimer); listenTimer = null; }
     if (chordPollTimer) { clearInterval(chordPollTimer); chordPollTimer = null; }
     stopSessionTimer();
   }
@@ -504,13 +499,6 @@
     letter-spacing: 0.04em;
     text-transform: lowercase;
   }
-  .np-mood {
-    padding: 4px 10px;
-    background: color-mix(in srgb, #14191C 70%, transparent);
-    border: 1px solid color-mix(in srgb, #2A3A33 70%, transparent);
-    border-radius: 9999px;
-    color: color-mix(in srgb, #E8C9A0 90%, transparent);
-  }
   .np-chord {
     font-size: 12px;
     color: color-mix(in srgb, var(--iris) 60%, transparent);
@@ -599,132 +587,6 @@
     color: color-mix(in srgb, var(--iris) 55%, transparent);
     letter-spacing: 0.08em;
   }
-  .spawn-toggle.glow {
-    box-shadow: 0 0 0 1px color-mix(in srgb, #E8C9A0 55%, transparent),
-                0 0 16px color-mix(in srgb, #E8C9A0 28%, transparent);
-    animation: save-pulse 2600ms ease-in-out infinite;
-  }
-  @keyframes save-pulse {
-    0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, #E8C9A0 40%, transparent), 0 0 10px color-mix(in srgb, #E8C9A0 18%, transparent); }
-    50%      { box-shadow: 0 0 0 1px color-mix(in srgb, #E8C9A0 70%, transparent), 0 0 22px color-mix(in srgb, #E8C9A0 40%, transparent); }
-  }
-  .saved-strip {
-    position: fixed;
-    left: 16px;
-    right: 16px;
-    bottom: 52px;
-    z-index: 45;
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 8px 2px;
-    justify-content: center;
-  }
-  .saved-card {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px 6px 12px;
-    background: color-mix(in srgb, #14191C 85%, transparent);
-    border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
-    border-radius: 14px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
-  .card-title {
-    background: transparent;
-    border: 0;
-    color: #E8C9A0;
-    font-family: var(--font);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: left;
-    padding: 0;
-    max-width: 160px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .card-title:hover, .card-title:focus-visible { color: var(--iris); }
-  .card-mood {
-    font-family: var(--font);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: lowercase;
-    color: color-mix(in srgb, var(--iris) 75%, transparent);
-    padding: 2px 6px;
-    border: 1px solid color-mix(in srgb, var(--iris) 35%, transparent);
-    border-radius: 9999px;
-  }
-  .card-del {
-    width: 20px;
-    height: 20px;
-    background: transparent;
-    border: 0;
-    color: color-mix(in srgb, var(--iris) 65%, transparent);
-    cursor: pointer;
-    font-size: 14px;
-    border-radius: 9999px;
-  }
-  .card-del:hover, .card-del:focus-visible { color: var(--pollen); }
-  .hud {
-    position: fixed;
-    left: 16px;
-    top: 16px;
-    display: flex;
-    gap: 12px;
-    z-index: 55;
-    font-family: var(--font);
-    font-size: 12px;
-    color: color-mix(in srgb, var(--iris) 70%, transparent);
-    pointer-events: none;
-  }
-  .hud-item {
-    padding: 4px 10px;
-    background: color-mix(in srgb, #14191C 70%, transparent);
-    border: 1px solid color-mix(in srgb, #2A3A33 70%, transparent);
-    border-radius: 9999px;
-    letter-spacing: 0.02em;
-  }
-  .save-flash {
-    position: fixed;
-    left: 50%;
-    top: 32%;
-    transform: translateX(-50%);
-    padding: 10px 18px;
-    font-family: var(--font);
-    font-size: 14px;
-    color: var(--pollen);
-    background: color-mix(in srgb, var(--loam) 80%, transparent);
-    border: 1px solid color-mix(in srgb, var(--iris) 60%, transparent);
-    border-radius: 9999px;
-    z-index: 60;
-    animation: save-pop 1400ms ease-out both;
-  }
-  @keyframes save-pop {
-    0% { opacity: 0; transform: translate(-50%, -4px) scale(0.96); }
-    20% { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
-    60% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -6px) scale(1); }
-  }
-  .mood-evidence {
-    font-family: var(--font);
-    font-size: 10px;
-    color: color-mix(in srgb, var(--iris) 55%, transparent);
-    text-align: right;
-    padding: 0 6px;
-    max-width: 260px;
-    line-height: 1.3;
-    opacity: 0;
-    transition: opacity 160ms ease-out;
-    pointer-events: none;
-  }
-  .control-bar:hover .mood-evidence,
-  .control-bar:focus-within .mood-evidence {
-    opacity: 1;
-  }
   .control-bar {
     position: fixed;
     right: 16px;
@@ -806,55 +668,4 @@
     text-align: right;
     padding: 0 6px;
   }
-  .saved-list {
-    list-style: none;
-    margin: 0;
-    padding: 4px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-width: 260px;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-  .saved-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: #14191C;
-    border: 1px solid #2A3A33;
-    border-radius: 9999px;
-    padding: 2px 6px 2px 10px;
-  }
-  .saved-title {
-    flex: 1 1 auto;
-    min-width: 0;
-    background: transparent;
-    border: 0;
-    color: #E8C9A0;
-    font-family: var(--font);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .saved-title:hover,
-  .saved-title:focus-visible { color: var(--iris); }
-  .saved-del {
-    flex: 0 0 auto;
-    width: 22px;
-    height: 22px;
-    background: transparent;
-    border: 0;
-    color: color-mix(in srgb, var(--iris) 70%, transparent);
-    font-family: var(--font);
-    font-size: 14px;
-    cursor: pointer;
-    border-radius: 9999px;
-  }
-  .saved-del:hover,
-  .saved-del:focus-visible { color: var(--pollen); }
 </style>

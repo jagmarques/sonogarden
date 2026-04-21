@@ -288,11 +288,6 @@ function midiToFreq(pitch) {
   return 440 * Math.pow(2, (pitch - 69) / 12);
 }
 
-// Drone removed after user feedback about low-frequency noises. Exports kept as no-ops so
-// autoplay.js imports still resolve without edits to that file.
-export function startDrone() { /* no drone in the calm build */ }
-export function stopDrone() { /* no drone */ }
-
 // Per-voice safe pitch ranges. Outside these ranges Tone.Sampler stretches awkwardly.
 const VOICE_RANGES = {
   piano: [36, 96],
