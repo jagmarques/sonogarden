@@ -1,5 +1,6 @@
 <script>
   import * as Tone from 'tone';
+  import { onMount } from 'svelte';
 
   import Garden from './visual/Garden.svelte';
   import Bloomfield from './visual/Bloomfield.svelte';
@@ -116,6 +117,10 @@
     if (!name || !MOODS[name]) return;
     activity = name;
     setMood(name);
+    if (typeof window !== 'undefined') {
+      window.__lastMoodApplied = name;
+      window.__moodApplyCount = (window.__moodApplyCount || 0) + 1;
+    }
     if (audioUnlocked) {
       stopAll();
       onMoodChange().catch((err) => logError('onMoodChange failed', err));
@@ -261,7 +266,7 @@
     try { window.location.reload(); } catch (_) { /* ignore */ }
   }
 
-  $effect(() => {
+  onMount(() => {
     boot();
     bootStuckTimer = setTimeout(() => {
       if (booting || tuningInstruments) bootStuck = true;
@@ -348,6 +353,7 @@
           type="button"
           class="mood-pill"
           class:active={activity === key}
+          data-mood={key}
           role="radio"
           aria-checked={activity === key}
           onclick={() => applyMood(key)}
