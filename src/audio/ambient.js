@@ -123,6 +123,27 @@ function emitPadChord(mood) {
   }
 }
 
+// Plays a real chord on the mood's phrase voice: root + 3rd + 5th + 7th, soft, slightly
+// staggered so each note has its own attack. This is the harmonic anchor on chord changes.
+function playPhraseChord(m, voicing = 'rich') {
+  const voiceKey = m.phraseVoice || 'harp';
+  const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
+  const triad = chord.type === 'min' ? [0, 3, 7] : [0, 4, 7];
+  const intervals = voicing === 'rich' ? [...triad, 11] : triad;
+  const baseOctave = (VOICE_OCTAVE[voiceKey] ?? 12);
+  const root = m.tonic + chord.root + baseOctave;
+  const myGen = _gen;
+  for (let i = 0; i < intervals.length; i++) {
+    const pitch = root + intervals[i];
+    const stagger = i * 35;
+    const vel = 0.22 - i * 0.02;
+    setTimeout(() => {
+      if (!_running || _gen !== myGen) return;
+      triggerVoice(voiceKey, pitch, Math.max(0.1, vel), 4.5);
+    }, stagger);
+  }
+}
+
 function scheduleChordDrift(mood) {
   if (!_running) return;
   const [lo, hi] = mood.chordChangeMs || [22000, 38000];
@@ -131,6 +152,7 @@ function scheduleChordDrift(mood) {
     const m = getCurrentMood();
     pickNextChord(m);
     emitPadChord(m);
+    playPhraseChord(m);
     scheduleChordDrift(m);
   }, nextMs);
 }
@@ -286,6 +308,7 @@ export function startAmbient() {
   ensureNoise();
   pickNextChord(mood);
   emitPadChord(mood);
+  playPhraseChord(mood);
   setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 2000);
   scheduleChordDrift(mood);
   scheduleChime();
@@ -308,8 +331,9 @@ export function onMoodChange() {
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
+  playPhraseChord(mood);
   const myGen = _gen;
-  setTimeout(() => { if (_running && _gen === myGen) playPhrase(getCurrentMood()); }, 1200);
+  setTimeout(() => { if (_running && _gen === myGen) playPhrase(getCurrentMood()); }, 1500);
   scheduleChime();
   if (mood.droneVoice) scheduleDrone(mood);
 }
