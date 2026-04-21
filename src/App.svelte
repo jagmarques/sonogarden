@@ -362,12 +362,14 @@
 
   <MuteButton muted={muted} onchange={handleMuteChange} />
 
-  {#if audioUnlocked}
+  {#if audioUnlocked && chordLabel}
     <div class="now-playing" aria-live="polite">
-      {#if chordLabel}<span class="np-chord">{chordLabel}</span>{/if}
-      <span class="timer">{fmtTime(sessionSec)}</span>
+      <span class="np-chord">{chordLabel}</span>
     </div>
+  {/if}
+  {#if audioUnlocked}
     <div class="transport-bar">
+      <span class="timer">{fmtTime(sessionSec)}</span>
       <button type="button" class="transport-btn" onclick={togglePause} aria-label={paused ? 'play' : 'pause'}>
         {#if paused}
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M7 5 L19 12 L7 19 Z" fill="currentColor" /></svg>
