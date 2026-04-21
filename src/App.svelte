@@ -102,20 +102,19 @@
       .catch((err) => logError('startAutoplay failed', err));
   }
 
+  let _unlockAttempted = false;
   async function handleUnlock() {
-    if (audioUnlocked) return;
-    // Tone.start() MUST run inside the gesture chain, synchronously with the tap. Await it
-    // before dismissing the overlay so the AudioContext is guaranteed running before autoplay.
-    try {
-      await initAudio();
-      setMood(activity);
-    } catch (err) {
-      logError('initAudio failed', err);
-    }
+    if (_unlockAttempted) return;
+    _unlockAttempted = true;
+    // Start Tone.start() synchronously inside the gesture chain (required by iOS Safari)
+    // but do NOT block overlay dismissal on it. If the mobile browser hangs resolving the
+    // start promise, the app still boots and the user sees the scene.
+    initAudio()
+      .then(() => setMood(activity))
+      .catch((err) => logError('initAudio failed', err));
     audioUnlocked = true;
     tuningInstruments = false;
     samplePercent = 100;
-    // Harp samples load in background; pad + noise start right away regardless.
     waitForVoicesLoaded().catch((err) => logError('voices load', err));
     maybeStartAutoplay();
     startSessionTimer();
