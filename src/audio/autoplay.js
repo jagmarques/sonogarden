@@ -30,10 +30,14 @@ async function tick() {
   try {
     const mood = getCurrentMood();
     const tonic = typeof mood.tonic === 'number' ? mood.tonic : SAMPLE_DEFAULT_TONIC;
-    // Lower, narrower temperature band for coherent mystical lines instead of jumpy ones.
-    const temperature = 0.55 + Math.random() * 0.25;
+    // High, wide temperature band for genuinely different phrases every tick.
+    const temperature = 1.0 + Math.random() * 0.5;
     const raw = await sampleMelody({ qpm: mood.bpm, temperature });
-    const shifted = transposeNoteSequence(raw, tonic - SAMPLE_DEFAULT_TONIC);
+    // Random diatonic octave/fifth shift on top of the tonic so successive phrases don't hang
+    // on exactly the same notes.
+    const diatonicOffsets = [0, 0, 0, -12, 12, 7, -5];
+    const extra = diatonicOffsets[Math.floor(Math.random() * diatonicOffsets.length)];
+    const shifted = transposeNoteSequence(raw, tonic - SAMPLE_DEFAULT_TONIC + extra);
     debug('sampled melody', { notes: shifted.notes?.length, totalTime: shifted.totalTime });
     playNoteSequence(shifted, { qpm: mood.bpm });
     emitMelody(shifted);
