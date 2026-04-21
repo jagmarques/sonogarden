@@ -112,16 +112,15 @@
     else showIntro = false;
   }
 
-  // Svelte 5 $effect: runs whenever activity changes, from any path (dropdown, share URL, first-open).
-  let _lastAppliedMood = null;
-  $effect(() => {
-    const a = activity;
-    if (!audioUnlocked || a === _lastAppliedMood) return;
-    _lastAppliedMood = a;
-    setMood(a);
-    stopAll();
-    onMoodChange().catch((err) => logError('onMoodChange failed', err));
-  });
+  function applyMood(name) {
+    if (!name || !MOODS[name]) return;
+    activity = name;
+    setMood(name);
+    if (audioUnlocked) {
+      stopAll();
+      onMoodChange().catch((err) => logError('onMoodChange failed', err));
+    }
+  }
 
   function compactMelody(ns) {
     if (!ns || !Array.isArray(ns.notes)) return null;
@@ -343,7 +342,7 @@
   {/if}
 
   <div class="control-bar">
-    <select class="activity-select" aria-label="Activity" bind:value={activity}>
+    <select class="activity-select" aria-label="Activity" value={activity} onchange={(e) => applyMood(e.currentTarget.value)}>
       {#each Object.keys(MOODS) as key}
         <option value={key}>{MOODS[key].label}</option>
       {/each}
