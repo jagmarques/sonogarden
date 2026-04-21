@@ -6,8 +6,12 @@ import { getCurrentMood } from './moods.js';
 
 const MAJOR_TRIAD = [0, 4, 7];
 const MINOR_TRIAD = [0, 3, 7];
-const MAJOR_PENT = [0, 2, 4, 7, 9];
-const MINOR_PENT = [0, 3, 5, 7, 10];
+// Full diatonic scales for richer melodic material than pentatonic.
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
+// Chord-tone indices into the diatonic scale (1-3-5-7).
+const CHORD_TONES_MAJ = [0, 2, 4, 6];
+const CHORD_TONES_MIN = [0, 2, 4, 6];
 
 // Key-related chords only. Roots relative to tonic in semitones.
 const MAJOR_CHORDS = [
@@ -48,8 +52,11 @@ export function getCurrentChordLabel() {
   const name = NOTE_NAMES[((midi % 12) + 12) % 12];
   return `${name} ${_currentChord.type === 'min' ? 'minor' : 'major'}`;
 }
-function pentFor(mood) {
-  return mood.scale === 'minor' ? MINOR_PENT : MAJOR_PENT;
+function scaleFor(mood) {
+  return mood.scale === 'minor' ? MINOR_SCALE : MAJOR_SCALE;
+}
+function chordTonesFor(mood) {
+  return mood.scale === 'minor' ? CHORD_TONES_MIN : CHORD_TONES_MAJ;
 }
 function chordsFor(mood) {
   return mood.scale === 'minor' ? MINOR_CHORDS : MAJOR_CHORDS;
@@ -125,20 +132,26 @@ function scheduleChordDrift(mood) {
   }, nextMs);
 }
 
-// Pentatonic-scale offsets. Lyrical shapes with returns and suspensions, not random walks.
+// Diatonic-scale phrase templates. {n, d}: n is scale degree (0-6), d is duration in beats.
+// Mix of ascents, descents, arches, returns, sighs, leaps, neighbour figures, and phrases
+// that rest on chord tones (3, 5) instead of always landing on the tonic.
 const PHRASES = [
-  [0, 2, 4, 2, 0],
-  [4, 3, 2, 0],
-  [0, 2, 4, 3, 2, 0],
-  [4, 2, 4, 2, 0],
-  [2, 4, 3, 2, 0, 2],
-  [0, 4, 2, 4, 0],
-  [4, 2, 3, 4, 2, 0],
-  [3, 4, 2, 0, 2, 0],
-  [0, 2, 0, 4, 2, 0],
-  [4, 3, 2, 4, 2, 0, 2],
-  [2, 4, 2, 0, 4, 2, 0],
-  [0, 4, 3, 2, 0, 2, 4],
+  [{n:0,d:1},{n:2,d:1},{n:4,d:2},{n:2,d:1.5}],
+  [{n:4,d:1},{n:3,d:0.5},{n:2,d:1},{n:0,d:2}],
+  [{n:4,d:0.5},{n:5,d:0.5},{n:4,d:1},{n:2,d:1},{n:0,d:2}],
+  [{n:0,d:0.75},{n:2,d:0.75},{n:4,d:1.5},{n:2,d:0.5},{n:0,d:1.5}],
+  [{n:2,d:1},{n:4,d:1.5},{n:6,d:1},{n:4,d:1.5}],
+  [{n:0,d:2},{n:4,d:1},{n:2,d:1.5}],
+  [{n:6,d:0.5},{n:4,d:0.5},{n:2,d:1},{n:0,d:2}],
+  [{n:0,d:1},{n:4,d:1.5},{n:2,d:0.5},{n:5,d:1.5}],
+  [{n:5,d:0.75},{n:4,d:0.75},{n:2,d:1},{n:0,d:1},{n:2,d:2}],
+  [{n:2,d:0.5},{n:4,d:0.5},{n:2,d:1},{n:0,d:0.5},{n:2,d:0.5},{n:4,d:2}],
+  [{n:0,d:1.5},{n:2,d:0.5},{n:4,d:1},{n:6,d:2}],
+  [{n:4,d:1},{n:2,d:0.5},{n:4,d:0.5},{n:5,d:1},{n:4,d:2}],
+  [{n:0,d:1},{n:2,d:1},{n:4,d:1},{n:5,d:1},{n:4,d:2}],
+  [{n:6,d:1},{n:5,d:1},{n:4,d:1},{n:2,d:1.5},{n:0,d:1.5}],
+  [{n:0,d:0.5},{n:4,d:1.5},{n:2,d:0.5},{n:0,d:2}],
+  [{n:2,d:1},{n:0,d:2},{n:4,d:1.5}],
 ];
 
 // Small timing perturbation so phrases don't feel metronomic. Keeps ambient, not robotic.
@@ -164,48 +177,71 @@ const VOICE_OCTAVE = {
   harmonium:   0,
 };
 
+function pickOctaveOffset() {
+  const r = Math.random();
+  if (r < 0.06) return -12;
+  if (r < 0.78) return 0;
+  if (r < 0.94) return 12;
+  return -12 + (Math.random() < 0.5 ? 0 : 24);
+}
+
 function playPhrase(m) {
   const voiceKey = m.phraseVoice || 'harp';
-  const pent = pentFor(m);
+  const scale = scaleFor(m);
+  const tones = chordTonesFor(m);
   const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
   const tmpl = PHRASES[Math.floor(Math.random() * PHRASES.length)];
   const baseOctave = VOICE_OCTAVE[voiceKey] ?? 12;
-  const octaveJump = Math.random() < 0.15 ? 12 : 0;
+  const octJump = pickOctaveOffset();
   const [tLo, tHi] = VOICE_TEMPO[voiceKey] || [320, 580];
-  const stepMs = tLo + Math.random() * (tHi - tLo);
-  const holdSec = (stepMs / 1000) * 2.6 + 1.4;
+  const beatMs = tLo + Math.random() * (tHi - tLo);
+  let cursor = 0;
   const n = tmpl.length;
   for (let i = 0; i < n; i++) {
-    const idx = Math.max(0, Math.min(pent.length - 1, tmpl[i]));
-    const pitch = m.tonic + chord.root + pent[idx] + baseOctave + octaveJump;
+    const step = tmpl[i];
+    let degree = step.n;
+    // 18 percent chance to lift this note up an octave within the phrase for a leap colour.
+    let extraOct = (Math.random() < 0.18 && i > 0) ? 7 : 0;
+    // On the first or last note, snap to a chord tone 60 percent of the time so phrases
+    // start and resolve on stable colours instead of always on the scale degree.
+    if ((i === 0 || i === n - 1) && Math.random() < 0.6) {
+      degree = tones[Math.floor(Math.random() * tones.length)];
+    }
+    const idx = Math.max(0, Math.min(scale.length - 1, degree));
+    const scaleSemis = scale[idx] + (extraOct ? 12 : 0);
+    const pitch = m.tonic + chord.root + scaleSemis + baseOctave + octJump;
     const arch = Math.sin((i / Math.max(1, n - 1)) * Math.PI);
     const vel = 0.28 + arch * 0.32;
-    const when = jitter(i * stepMs, 30);
+    const noteMs = beatMs * step.d;
+    const holdSec = (noteMs / 1000) * 2.4 + 1.0;
+    const when = jitter(cursor, 35);
     setTimeout(() => {
       if (!_running) return;
       triggerVoice(voiceKey, pitch, Math.max(0.15, Math.min(0.75, vel)), holdSec);
     }, Math.max(0, when));
+    cursor += noteMs;
   }
-  // 30 percent chance of a soft answering note an octave up after the phrase ends, gives
-  // a call-and-response shape that reads as more lyrical.
-  if (Math.random() < 0.3) {
-    const lastIdx = tmpl[n - 1];
-    const answerPitch = m.tonic + chord.root + pent[lastIdx] + baseOctave + 12;
-    const answerWhen = n * stepMs + 350;
+  // 25 percent chance of a soft answering note in the OPPOSITE octave for call-and-response.
+  if (Math.random() < 0.25) {
+    const tone = tones[Math.floor(Math.random() * tones.length)];
+    const answerSemis = scale[tone];
+    const answerOct = octJump <= 0 ? 12 : 0;
+    const pitch = m.tonic + chord.root + answerSemis + baseOctave + answerOct;
     setTimeout(() => {
       if (!_running) return;
-      triggerVoice(voiceKey, answerPitch, 0.18, holdSec * 0.7);
-    }, answerWhen);
+      triggerVoice(voiceKey, pitch, 0.16, beatMs / 1000 * 2.5);
+    }, cursor + 280);
   }
 }
 
 function playShimmer(m) {
   const key = m.shimmerVoice;
   if (!key) return;
-  const pent = pentFor(m);
+  const tones = chordTonesFor(m);
+  const scale = scaleFor(m);
   const root = (_currentChord && _currentChord.root) || 0;
-  const n = pent[Math.floor(Math.random() * pent.length)];
-  const pitch = m.tonic + root + n + 36;
+  const t = tones[Math.floor(Math.random() * tones.length)];
+  const pitch = m.tonic + root + scale[t] + 36;
   triggerVoice(key, pitch, 0.18, 4.5);
 }
 
