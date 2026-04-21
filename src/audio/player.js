@@ -140,11 +140,53 @@ function unlockIOSAudio() {
   } catch (_) { /* ignore */ }
 }
 
+// iOS 17.5+ ships navigator.audioSession. Setting type='playback' routes Web Audio through the
+// "media" channel instead of the default "ambient" channel, which unmutes output when the
+// hardware silent switch is on. SOURCE: WebKit bug 237322 (Jean-Yves Avenard), bug 261554.
+function setIOSAudioSessionPlayback() {
+  try {
+    if (typeof navigator !== 'undefined' && 'audioSession' in navigator) {
+      navigator.audioSession.type = 'playback';
+    }
+  } catch (_) { /* ignore */ }
+}
+
+// Silent-audio-element fallback for iOS < 17.5 where navigator.audioSession is absent.
+// Keeps the "media" route open by continuously playing a hidden silent WAV loop.
+// SOURCE: github.com/swevans/unmute, github.com/feross/unmute-ios-audio, Tone.js issue #909.
+let _silentAudioEl = null;
+function startSilentAudioKeepalive() {
+  try {
+    if (_silentAudioEl) return;
+    if (typeof document === 'undefined') return;
+    if (typeof navigator !== 'undefined' && 'audioSession' in navigator) return;
+    // 0.05s 8kHz mono PCM WAV of pure silence, base64-inlined. Loops forever.
+    const silentWav = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA==';
+    const el = document.createElement('audio');
+    el.setAttribute('playsinline', '');
+    el.setAttribute('webkit-playsinline', '');
+    el.setAttribute('x-webkit-airplay', 'deny');
+    el.loop = true;
+    el.preload = 'auto';
+    el.muted = false;
+    el.volume = 1;
+    el.src = silentWav;
+    el.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(el);
+    const p = el.play();
+    if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
+    _silentAudioEl = el;
+  } catch (_) { /* ignore */ }
+}
+
 async function realStart() {
   if (_started && contextRunning()) return;
   unlockIOSAudio();
+  setIOSAudioSessionPlayback();
+  startSilentAudioKeepalive();
   await Tone.start();
   unlockIOSAudio();
+  setIOSAudioSessionPlayback();
   ensureMasterChain();
   ensureVoices();
 
@@ -295,4 +337,52 @@ export function stopAll() {
 
 export function setMuted(muted) {
   Tone.getDestination().mute = Boolean(muted);
+}
+
+// Diagnostic snapshot for the on-screen badge. Safe to call at any time.
+export function getAudioDiagnostics() {
+  const out = {
+    toneState: '?',
+    rawState: '?',
+    sampleRate: 0,
+    session: null,
+    padConnected: false,
+    samplerLoaded: false,
+    silentKeepalive: false,
+    notes: 0,
+    lastNoteAgoMs: null,
+  };
+  try {
+    const ctx = Tone.getContext();
+    out.toneState = ctx.state;
+    const raw = ctx.rawContext;
+    if (raw) {
+      out.rawState = raw.state;
+      out.sampleRate = raw.sampleRate;
+    }
+  } catch (_) { /* ignore */ }
+  try {
+    if (typeof navigator !== 'undefined' && 'audioSession' in navigator) {
+      out.session = navigator.audioSession.type || 'unset';
+    } else {
+      out.session = 'n/a';
+    }
+  } catch (_) { out.session = 'err'; }
+  out.padConnected = Boolean(_sourceGain);
+  try {
+    const v = _voices && _voices.piano && _voices.piano.synth;
+    out.samplerLoaded = Boolean(v && v.loaded);
+  } catch (_) { /* ignore */ }
+  try {
+    out.silentKeepalive = Boolean(_silentAudioEl && !_silentAudioEl.paused);
+  } catch (_) { /* ignore */ }
+  try {
+    if (typeof window !== 'undefined' && window.__sonoStats) {
+      out.notes = window.__sonoStats.notes || 0;
+      if (window.__sonoStats.lastAt) {
+        out.lastNoteAgoMs = Date.now() - window.__sonoStats.lastAt;
+      }
+    }
+  } catch (_) { /* ignore */ }
+  return out;
 }
