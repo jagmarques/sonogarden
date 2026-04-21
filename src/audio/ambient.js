@@ -119,19 +119,23 @@ function scheduleChordDrift(mood) {
   }, nextMs);
 }
 
+function playOneChime(m) {
+  const pent = pentFor(m);
+  const n = pent[Math.floor(Math.random() * pent.length)];
+  const octave = 12 + (Math.random() < 0.4 ? 12 : 0);
+  const root = (_currentChord && _currentChord.root) || 0;
+  const pitch = m.tonic + root + n + octave;
+  triggerHarp(pitch, 0.5, 3.4);
+}
+
 function scheduleChime() {
   if (!_running) return;
   const mood = getCurrentMood();
-  const [lo, hi] = mood.chimeMs || [9000, 16000];
+  const [lo, hi] = mood.chimeMs || [3500, 6500];
   const nextMs = lo + Math.random() * (hi - lo);
   _chimeTimer = setTimeout(() => {
-    const m = getCurrentMood();
-    const pent = pentFor(m);
-    const n = pent[Math.floor(Math.random() * pent.length)];
-    const octave = 12 + (Math.random() < 0.4 ? 12 : 0);
-    const root = (_currentChord && _currentChord.root) || 0;
-    const pitch = m.tonic + root + n + octave;
-    triggerHarp(pitch, 0.45, 3.2);
+    if (!_running) return;
+    playOneChime(getCurrentMood());
     scheduleChime();
   }, nextMs);
 }
@@ -143,6 +147,10 @@ export function startAmbient() {
   ensureNoise();
   pickNextChord(mood);
   emitPadChord(mood);
+  // Opening 3-note harp phrase so the instrument is present from the first moment.
+  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 400);
+  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 1600);
+  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 2900);
   schedulePadRefresh(mood);
   scheduleChordDrift(mood);
   scheduleChime();
@@ -161,4 +169,6 @@ export function onMoodChange() {
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
+  // Play a chime right away so the mood change is audible.
+  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 300);
 }
