@@ -10,6 +10,7 @@
   import { initAudio, setMuted, waitForVoicesLoaded, setMood, stopAll } from './audio/player.js';
   import { MOODS, DEFAULT_MOOD, moodByHour } from './audio/moods.js';
   import { startAutoplay, stopAutoplay, onMoodChange, playStoredMelody } from './audio/autoplay.js';
+  import { getCurrentChordLabel } from './audio/ambient.js';
 
   const DEBUG = false;
 
@@ -28,8 +29,15 @@
   let shareFlashTimer = null;
   let savedExpanded = $state(false);
   let pendingSharedMelody = null;
+  let chordLabel = $state('');
+  let listenSec = $state(0);
+  let listenTimer = null;
+  let showIntro = $state(false);
+  let introSlide = $state(0);
+  let chordPollTimer = null;
 
   const muted = $derived(gardenState.muted);
+  const showSaveGlow = $derived(audioUnlocked && listenSec >= 20);
 
   function logError(context, err) {
     if (DEBUG) {
@@ -84,6 +92,26 @@
     }
     tuningInstruments = false;
     maybeStartAutoplay();
+    if (listenTimer) clearInterval(listenTimer);
+    listenTimer = setInterval(() => { listenSec += 1; }, 1000);
+    if (chordPollTimer) clearInterval(chordPollTimer);
+    chordPollTimer = setInterval(() => {
+      const lbl = getCurrentChordLabel();
+      if (lbl && lbl !== chordLabel) chordLabel = lbl;
+    }, 500);
+    // Show 3-slide intro once per user.
+    try {
+      if (!localStorage.getItem('sonogarden.firstOpen')) {
+        showIntro = true;
+        introSlide = 0;
+        localStorage.setItem('sonogarden.firstOpen', '1');
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  function advanceIntro() {
+    if (introSlide < 2) introSlide += 1;
+    else showIntro = false;
   }
 
   function handleActivityChange(e) {
@@ -198,6 +226,8 @@
 
   function handleBeforeUnload() {
     try { stopAutoplay(); stopAll(); } catch (_) { /* ignore */ }
+    if (listenTimer) { clearInterval(listenTimer); listenTimer = null; }
+    if (chordPollTimer) { clearInterval(chordPollTimer); chordPollTimer = null; }
   }
 
   function handleVisibilityChange() {
@@ -288,33 +318,62 @@
     <div class="save-flash" role="status" aria-live="polite">moment saved</div>
   {/if}
 
+  {#if audioUnlocked}
+    <div class="now-playing" aria-live="polite">
+      <span class="np-mood">{MOODS[activity]?.label ?? ''}</span>
+      {#if chordLabel}<span class="np-chord">{chordLabel}</span>{/if}
+    </div>
+  {/if}
+
+  <div class="tagline">free forever / no signup / browser-only</div>
+
+  {#if showIntro && audioUnlocked}
+    <button type="button" class="intro-overlay" onclick={advanceIntro}>
+      <div class="intro-inner">
+        {#if introSlide === 0}
+          <p class="intro-line">sonogarden.</p>
+          <p class="intro-sub">ai composes. you listen.</p>
+        {:else if introSlide === 1}
+          <p class="intro-line">browser only.</p>
+          <p class="intro-sub">no signup. free forever.</p>
+        {:else}
+          <p class="intro-line">save the moments you like.</p>
+          <p class="intro-sub">share them with a URL.</p>
+        {/if}
+        <p class="intro-hint">{introSlide < 2 ? 'click to continue' : 'click to begin'}</p>
+      </div>
+    </button>
+  {/if}
+
   <div class="control-bar">
     <select class="activity-select" aria-label="Activity" value={activity} onchange={handleActivityChange}>
       {#each Object.keys(MOODS) as key}
         <option value={key}>{MOODS[key].label}</option>
       {/each}
     </select>
-    <button type="button" class="spawn-toggle" onclick={handleSaveMoment}>save this moment</button>
-    <button type="button" class="spawn-toggle" onclick={handleShare}>share</button>
+    <button type="button" class="spawn-toggle" class:glow={showSaveGlow} onclick={handleSaveMoment}>save this moment</button>
+    <button type="button" class="spawn-toggle" onclick={handleShare} title="copy a link to this exact moment">copy link</button>
     {#if shareFlash}
-      <span class="share-flash" role="status" aria-live="polite">link copied</span>
+      <span class="share-flash" role="status" aria-live="polite">copied</span>
     {/if}
     {#if gardenState.savedMoments.length > 0}
       <button type="button" class="spawn-toggle" onclick={() => (savedExpanded = !savedExpanded)} aria-expanded={savedExpanded}>
-        saved {savedExpanded ? 'hide' : 'show'} ({gardenState.savedMoments.length})
+        saved ({gardenState.savedMoments.length})
       </button>
     {/if}
-    {#if savedExpanded && gardenState.savedMoments.length > 0}
-      <ul class="saved-list" aria-label="saved moments">
-        {#each gardenState.savedMoments as m, i (m.ts)}
-          <li class="saved-item">
-            <button type="button" class="saved-title" onclick={() => handleLoadMoment(i)}>{m.title}</button>
-            <button type="button" class="saved-del" aria-label="delete" onclick={() => handleDeleteMoment(i)}>×</button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
   </div>
+
+  {#if savedExpanded && gardenState.savedMoments.length > 0}
+    <div class="saved-strip" aria-label="saved moments">
+      {#each gardenState.savedMoments as m, i (m.ts)}
+        <div class="saved-card">
+          <button type="button" class="card-title" onclick={() => handleLoadMoment(i)} title="play this moment">{m.title}</button>
+          <span class="card-mood">{m.mood}</span>
+          <button type="button" class="card-del" aria-label="delete" onclick={() => handleDeleteMoment(i)}>×</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -381,6 +440,159 @@
     z-index: 70;
   }
   .error-text { color: var(--pollen); }
+  .now-playing {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 45;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-family: var(--font);
+    font-size: 12px;
+    color: color-mix(in srgb, var(--iris) 75%, transparent);
+    pointer-events: none;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+  }
+  .np-mood {
+    padding: 4px 10px;
+    background: color-mix(in srgb, #14191C 70%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 70%, transparent);
+    border-radius: 9999px;
+    color: color-mix(in srgb, #E8C9A0 90%, transparent);
+  }
+  .np-chord {
+    font-size: 11px;
+    color: color-mix(in srgb, var(--iris) 60%, transparent);
+  }
+  .tagline {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 45;
+    font-family: var(--font);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: color-mix(in srgb, var(--iris) 45%, transparent);
+    pointer-events: none;
+    text-transform: lowercase;
+  }
+  .intro-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: color-mix(in srgb, var(--loam) 72%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    cursor: pointer;
+    font-family: var(--font);
+    color: var(--petal);
+    animation: intro-fade 400ms ease-out both;
+  }
+  @keyframes intro-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .intro-inner {
+    max-width: 560px;
+    text-align: center;
+    padding: 0 32px;
+  }
+  .intro-line {
+    margin: 0 0 10px;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--petal);
+  }
+  .intro-sub {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--iris);
+    letter-spacing: 0;
+  }
+  .intro-hint {
+    margin: 24px 0 0;
+    font-size: 11px;
+    color: color-mix(in srgb, var(--iris) 55%, transparent);
+    letter-spacing: 0.08em;
+  }
+  .spawn-toggle.glow {
+    box-shadow: 0 0 0 1px color-mix(in srgb, #E8C9A0 55%, transparent),
+                0 0 16px color-mix(in srgb, #E8C9A0 28%, transparent);
+    animation: save-pulse 2600ms ease-in-out infinite;
+  }
+  @keyframes save-pulse {
+    0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, #E8C9A0 40%, transparent), 0 0 10px color-mix(in srgb, #E8C9A0 18%, transparent); }
+    50%      { box-shadow: 0 0 0 1px color-mix(in srgb, #E8C9A0 70%, transparent), 0 0 22px color-mix(in srgb, #E8C9A0 40%, transparent); }
+  }
+  .saved-strip {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 52px;
+    z-index: 45;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 2px;
+    justify-content: center;
+  }
+  .saved-card {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 12px;
+    background: color-mix(in srgb, #14191C 85%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
+    border-radius: 14px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .card-title {
+    background: transparent;
+    border: 0;
+    color: #E8C9A0;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    padding: 0;
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-title:hover, .card-title:focus-visible { color: var(--iris); }
+  .card-mood {
+    font-family: var(--font);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    color: color-mix(in srgb, var(--iris) 75%, transparent);
+    padding: 2px 6px;
+    border: 1px solid color-mix(in srgb, var(--iris) 35%, transparent);
+    border-radius: 9999px;
+  }
+  .card-del {
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: 0;
+    color: color-mix(in srgb, var(--iris) 65%, transparent);
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 9999px;
+  }
+  .card-del:hover, .card-del:focus-visible { color: var(--pollen); }
   .hud {
     position: fixed;
     left: 16px;
