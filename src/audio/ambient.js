@@ -70,7 +70,7 @@ function ensurePadSynth() {
     oscillator: { type: 'sine' },
     envelope: { attack: 6, decay: 0, sustain: 1, release: 10 },
   }).connect(dest);
-  _padSynth.volume.value = -12;
+  _padSynth.volume.value = -26;
   return _padSynth;
 }
 
