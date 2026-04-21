@@ -7,10 +7,10 @@
   import StartOverlay from './ui/StartOverlay.svelte';
   import DiagnosticBadge from './ui/DiagnosticBadge.svelte';
 
-  import { gardenState, setLiveMelody, loadSavedMoments, persistSavedMoments } from './state/store.svelte.js';
+  import { gardenState } from './state/store.svelte.js';
   import { initAudio, setMuted, waitForVoicesLoaded, setMood, stopAll } from './audio/player.js';
   import { MOODS, DEFAULT_MOOD, moodByHour } from './audio/moods.js';
-  import { startAutoplay, stopAutoplay, onMoodChange, playStoredMelody } from './audio/autoplay.js';
+  import { startAutoplay, stopAutoplay, onMoodChange } from './audio/autoplay.js';
   import { getCurrentChordLabel } from './audio/ambient.js';
 
   const DEBUG = false;
@@ -29,9 +29,6 @@
     && new URL(window.location.href).searchParams.has('debug');
 
   let activity = $state(DEFAULT_MOOD);
-  let shareFlash = $state(false);
-  let shareFlashTimer = null;
-  let pendingSharedMelody = null;
   let chordLabel = $state('');
   let showIntro = $state(false);
   let introSlide = $state(0);
@@ -86,22 +83,10 @@
     }
   }
 
-  function handleMelody(ns) {
-    setLiveMelody(ns);
-  }
-
   function maybeStartAutoplay() {
     if (autoplayActive || !audioUnlocked || booting) return;
     autoplayActive = true;
-    startAutoplay({ onMelody: handleMelody })
-      .then(() => {
-        if (pendingSharedMelody) {
-          playStoredMelody(pendingSharedMelody);
-          handleMelody(pendingSharedMelody);
-          pendingSharedMelody = null;
-        }
-      })
-      .catch((err) => logError('startAutoplay failed', err));
+    startAutoplay().catch((err) => logError('startAutoplay failed', err));
   }
 
   let _unlockAttempted = false;
@@ -163,104 +148,6 @@
     }
   }
 
-  function compactMelody(ns) {
-    if (!ns || !Array.isArray(ns.notes)) return null;
-    return {
-      n: ns.notes.map((x) => [x.pitch, x.startTime ?? 0, x.endTime ?? 0, x.velocity ?? 80]),
-      t: ns.totalTime ?? 0,
-      q: (ns.tempos && ns.tempos[0] && ns.tempos[0].qpm) || 120,
-    };
-  }
-
-  function expandMelody(c) {
-    if (!c || !Array.isArray(c.n)) return null;
-    return {
-      notes: c.n.map((a) => ({ pitch: a[0], startTime: a[1], endTime: a[2], velocity: a[3] })),
-      totalTime: c.t,
-      tempos: [{ time: 0, qpm: c.q || 120 }],
-    };
-  }
-
-  function encodeShareState(mood, ns) {
-    const payload = { m: mood, ns: compactMelody(ns) };
-    return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-  }
-
-  function decodeShareState(str) {
-    try {
-      const json = decodeURIComponent(escape(atob(str)));
-      const obj = JSON.parse(json);
-      if (!obj || typeof obj !== 'object') return null;
-      return { mood: obj.m, ns: expandMelody(obj.ns) };
-    } catch (_) {
-      return null;
-    }
-  }
-
-  async function handleShare() {
-    const encoded = encodeShareState(activity, gardenState.liveMelody);
-    try {
-      const url = new URL(location.href);
-      url.searchParams.set('s', encoded);
-      history.replaceState(null, '', url.toString());
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url.toString());
-    } catch (err) {
-      logError('share failed', err);
-    }
-    shareFlash = true;
-    if (shareFlashTimer) clearTimeout(shareFlashTimer);
-    shareFlashTimer = setTimeout(() => { shareFlash = false; shareFlashTimer = null; }, 2000);
-  }
-
-  function handleSaveMoment() {
-    if (!gardenState.liveMelody) return;
-    const title = (typeof window !== 'undefined' && window.prompt) ? window.prompt('name this moment') : '';
-    if (!title || !title.trim()) return;
-    const moment = {
-      title: title.trim(),
-      mood: activity,
-      ts: Date.now(),
-      liveMelody: compactMelody(gardenState.liveMelody),
-    };
-    gardenState.savedMoments = [...gardenState.savedMoments, moment];
-    persistSavedMoments();
-    gardenState.saveFlash = true;
-    setTimeout(() => { gardenState.saveFlash = false; }, 1400);
-  }
-
-  function handleLoadMoment(idx) {
-    const m = gardenState.savedMoments[idx];
-    if (!m) return;
-    activity = m.mood;
-    setMood(activity);
-    stopAll();
-    const ns = expandMelody(m.liveMelody);
-    if (ns) {
-      playStoredMelody(ns);
-      handleMelody(ns);
-    } else {
-      onMoodChange().catch((err) => logError('load moment mood change failed', err));
-    }
-  }
-
-  function handleDeleteMoment(idx) {
-    gardenState.savedMoments = gardenState.savedMoments.filter((_, i) => i !== idx);
-    persistSavedMoments();
-  }
-
-  function processShareParam() {
-    if (typeof window === 'undefined') return;
-    const url = new URL(location.href);
-    const encoded = url.searchParams.get('s');
-    if (!encoded) return;
-    const decoded = decodeShareState(encoded);
-    if (!decoded) return;
-    if (typeof decoded.mood === 'string' && MOODS[decoded.mood]) {
-      activity = decoded.mood;
-    }
-    if (decoded.ns) pendingSharedMelody = decoded.ns;
-  }
-
   function handleMuteChange(next) {
     gardenState.muted = next;
     setMuted(next);
@@ -289,10 +176,7 @@
   }
 
   async function boot() {
-    loadSavedMoments();
-    processShareParam();
-    const hadShare = typeof window !== 'undefined' && new URL(location.href).searchParams.has('s');
-    if (!hadShare) activity = moodByHour(new Date().getHours());
+    activity = moodByHour(new Date().getHours());
     setMood(activity);
     booting = false;
     maybeStartAutoplay();
@@ -412,10 +296,6 @@
         >{MOODS[key].label}</button>
       {/each}
     </div>
-    <button type="button" class="spawn-toggle" onclick={handleShare} title="copy a link to this exact moment">copy link</button>
-    {#if shareFlash}
-      <span class="share-flash" role="status" aria-live="polite">copied</span>
-    {/if}
   </div>
 {/if}
 
@@ -629,50 +509,10 @@
     border-color: #E8C9A0;
   }
   @media (hover: none), (max-width: 768px) {
-    .mood-pill,
-    .control-bar .spawn-toggle {
+    .mood-pill {
       height: 40px;
       padding: 0 18px;
       font-size: 14px;
     }
-  }
-  .control-bar select,
-  .control-bar .spawn-toggle {
-    height: 32px;
-    padding: 0 14px;
-    background: #14191C;
-    border: 1px solid #2A3A33;
-    border-radius: 9999px;
-    color: #E8C9A0;
-    font-family: var(--font);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    text-transform: lowercase;
-    letter-spacing: -0.005em;
-  }
-  .control-bar select {
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238AA6C1' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 32px;
-    min-width: 160px;
-  }
-  .control-bar select option { background: var(--loam); color: var(--iris); }
-  .control-bar select:hover,
-  .control-bar select:focus-visible,
-  .control-bar .spawn-toggle:hover,
-  .control-bar .spawn-toggle:focus-visible {
-    color: var(--iris);
-    border-color: var(--iris);
-  }
-  .share-flash {
-    font-family: var(--font);
-    font-size: 12px;
-    color: var(--pollen);
-    text-align: right;
-    padding: 0 6px;
   }
 </style>

@@ -9,12 +9,7 @@ import { setPadVolume } from './ambient.js';
 const DEBUG = false;
 const MASTER_LIMITER_THRESHOLD_DB = -3;
 const MASTER_GAIN_DB = 0;
-const DEFAULT_QPM = 80;
-const DRONE_GAIN_DB = -44;
 const MELODY_GAIN_DB = 0;
-const DROP_DB_ON_NOTE = -3;
-const DUCK_ATTACK = 0.04;
-const DUCK_RELEASE = 0.6;
 
 let _sourceGain = null;
 let _masterGain = null;
@@ -26,10 +21,6 @@ let _limiter = null;
 
 let _voices = null;
 let _melodyGain = null;
-let _droneSynth = null;
-let _droneGain = null;
-let _droneBase = 1;
-
 let _started = false;
 let _starting = null;
 let _gestureResolvers = [];
@@ -320,63 +311,6 @@ export async function triggerVoice(voiceKey, pitch, velocity = 0.5, duration = 2
   } catch (err) {
     debug('triggerVoice failed', err);
   }
-}
-
-// Backwards-compatible: trigger on the harp specifically.
-export async function triggerHarp(pitch, velocity = 0.5, duration = 2.5, atTime = null) {
-  return triggerVoice('harp', pitch, velocity, duration, atTime);
-}
-
-// Plays a MusicVAE INoteSequence. Start times are in seconds at the sequence's qpm.
-export async function playNoteSequence(ns, opts = {}) {
-  if (!ns || !Array.isArray(ns.notes) || ns.notes.length === 0) return null;
-
-  const { qpm: qpmOpt, velocity = 0.45 } = opts;
-  const qpm =
-    typeof qpmOpt === 'number' && qpmOpt > 0
-      ? qpmOpt
-      : (ns.tempos && ns.tempos[0] && ns.tempos[0].qpm) || DEFAULT_QPM;
-
-  await initAudio();
-  if (!contextRunning()) return null;
-
-  const voices = ensureVoices();
-  const piano = voices.piano;
-  if (!piano) return null;
-
-  const base = Tone.now() + 0.05;
-  const srcQpm = (ns.tempos && ns.tempos[0] && ns.tempos[0].qpm) || 120;
-  const scale = srcQpm / qpm;
-
-  let scheduled = 0;
-  for (const n of ns.notes) {
-    if (typeof n.pitch !== 'number') continue;
-    const startSec = (typeof n.startTime === 'number' ? n.startTime : 0) * scale;
-    const endSec = (typeof n.endTime === 'number' ? n.endTime : (n.startTime || 0) + 0.25) * scale;
-    const dur = Math.max(0.08, endSec - startSec);
-    const vel = typeof n.velocity === 'number' ? Math.max(0.1, Math.min(1, n.velocity / 127)) : velocity;
-    const absTime = base + startSec;
-    // Clamp pitch into the harp sampler's trustworthy octave range.
-    let pitch = n.pitch;
-    while (pitch < 48) pitch += 12;
-    while (pitch > 84) pitch -= 12;
-    try {
-      piano.synth.triggerAttackRelease(midiToFreq(pitch), dur, absTime, vel);
-      emitNote({ pitch, velocity: vel, duration: dur, atMs: Date.now() + startSec * 1000 });
-      scheduled++;
-    } catch (err) {
-      debug('note trigger failed', err);
-    }
-  }
-  if (typeof window !== 'undefined') {
-    window.__sonoStats = window.__sonoStats || { notes: 0, plays: 0, drones: 0 };
-    window.__sonoStats.notes += scheduled;
-    window.__sonoStats.plays += 1;
-    window.__sonoStats.lastQpm = qpm;
-    window.__sonoStats.lastScheduled = scheduled;
-    window.__sonoStats.lastAt = Date.now();
-  }
-  return { notes: scheduled };
 }
 
 export function stopAll() {
