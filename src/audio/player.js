@@ -163,48 +163,10 @@ function midiToFreq(pitch) {
   return 440 * Math.pow(2, (pitch - 69) / 12);
 }
 
-// Pads a tonic+fifth low drone under sampled melodies so gaps never feel dead.
-export function startDrone(mood) {
-  ensureMasterChain();
-  if (!_droneSynth) {
-    _droneBase = dbToLin(DRONE_GAIN_DB);
-    _droneGain = new Tone.Gain(_droneBase).connect(_sourceGain);
-    _droneSynth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'sine' },
-      envelope: { attack: 1.5, decay: 0, sustain: 1, release: 4 },
-    }).connect(_droneGain);
-  }
-  const tonic = typeof mood?.tonic === 'number' ? mood.tonic : 60;
-  const low = tonic - 12;
-  const fifth = low + 7;
-  try {
-    _droneSynth.releaseAll();
-    _droneSynth.triggerAttack([midiToFreq(low), midiToFreq(fifth)], Tone.now() + 0.05);
-    if (typeof window !== 'undefined') {
-      window.__sonoStats = window.__sonoStats || { notes: 0, plays: 0, drones: 0 };
-      window.__sonoStats.drones += 1;
-    }
-  } catch (err) {
-    debug('drone start failed', err);
-  }
-}
-
-export function stopDrone() {
-  if (!_droneSynth) return;
-  try { _droneSynth.releaseAll(); } catch (_) { /* ignore */ }
-}
-
-// Sidechain-style duck: on each note, drop drone gain toward floor then spring back.
-function duckDrone(atTime) {
-  if (!_droneGain) return;
-  const g = _droneGain.gain;
-  const floor = _droneBase * dbToLin(DROP_DB_ON_NOTE);
-  try {
-    g.cancelScheduledValues(atTime);
-    g.setTargetAtTime(floor, atTime, DUCK_ATTACK);
-    g.setTargetAtTime(_droneBase, atTime + DUCK_ATTACK + 0.05, DUCK_RELEASE);
-  } catch (_) { /* ignore */ }
-}
+// Drone removed after user feedback about low-frequency noises. Exports kept as no-ops so
+// autoplay.js imports still resolve without edits to that file.
+export function startDrone() { /* no drone in the calm build */ }
+export function stopDrone() { /* no drone */ }
 
 // Plays a MusicVAE INoteSequence. Start times are in seconds at the sequence's qpm.
 export async function playNoteSequence(ns, opts = {}) {
@@ -235,10 +197,14 @@ export async function playNoteSequence(ns, opts = {}) {
     const dur = Math.max(0.08, endSec - startSec);
     const vel = typeof n.velocity === 'number' ? Math.max(0.1, Math.min(1, n.velocity / 127)) : velocity;
     const absTime = base + startSec;
+    // Clamp pitch into the harp sampler's trustworthy octave range. Below C3 the sampler
+    // interpolates from distant samples and produces muddy low artefacts.
+    let pitch = n.pitch;
+    while (pitch < 48) pitch += 12;
+    while (pitch > 84) pitch -= 12;
     try {
-      piano.synth.triggerAttackRelease(midiToFreq(n.pitch), dur, absTime, vel);
-      duckDrone(absTime);
-      emitNote({ pitch: n.pitch, velocity: vel, duration: dur, atMs: Date.now() + startSec * 1000 });
+      piano.synth.triggerAttackRelease(midiToFreq(pitch), dur, absTime, vel);
+      emitNote({ pitch, velocity: vel, duration: dur, atMs: Date.now() + startSec * 1000 });
       scheduled++;
     } catch (err) {
       debug('note trigger failed', err);
