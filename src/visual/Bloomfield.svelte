@@ -31,9 +31,14 @@
   let connPosAttr = null;
   const MAX_CONNECTIONS = 200;
   const CONNECTION_DIST = 4.5;
-  // Click cumulatively grows the centerpiece and adds a momentary pulse; resets on pause/restart.
   let clickGrowth = 0;
   let clickPulseEnds = 0;
+  // Geometry morphing: shape A fades out, shape B fades in on schedule or click.
+  const SHAPES = ['icosahedron', 'dodecahedron', 'octahedron', 'tetrahedron', 'torusKnot'];
+  let currentShape = 0;
+  let targetShape = 0;
+  let morphPhase = 1;
+  let nextAutoMorphAt = 0;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -159,6 +164,50 @@
   function deepVec3(m) {
     if (m && m.bgBot) return new THREE.Color(m.bgBot);
     return new THREE.Color(0x05080E);
+  }
+
+  function buildShapeGeom(kind, size) {
+    let g;
+    if (kind === 'dodecahedron') g = new THREE.DodecahedronGeometry(size, 0);
+    else if (kind === 'octahedron') g = new THREE.OctahedronGeometry(size, 0);
+    else if (kind === 'tetrahedron') g = new THREE.TetrahedronGeometry(size, 0);
+    else if (kind === 'torusKnot') g = new THREE.TorusKnotGeometry(size * 0.7, size * 0.18, 60, 8);
+    else g = new THREE.IcosahedronGeometry(size, 1);
+    const edges = new THREE.EdgesGeometry(g);
+    g.dispose();
+    return edges;
+  }
+
+  function triggerMorph() {
+    if (morphPhase < 1) return;
+    targetShape = (currentShape + 1) % SHAPES.length;
+    morphPhase = 0;
+  }
+
+  function stepMorph(dt) {
+    if (morphPhase >= 1) {
+      if (performance.now() / 1000 >= nextAutoMorphAt) {
+        triggerMorph();
+        nextAutoMorphAt = performance.now() / 1000 + 25 + Math.random() * 10;
+      }
+      return;
+    }
+    morphPhase = Math.min(1, morphPhase + dt * 0.5);
+    const half = 0.5;
+    const shrink = morphPhase < half ? 1 - morphPhase / half : (morphPhase - half) / (1 - half);
+    if (centerpiece) centerpiece.scale.setScalar((1 + clickGrowth) * shrink);
+    if (centerInner) centerInner.scale.setScalar((1 + clickGrowth) * shrink);
+    if (morphPhase >= half && currentShape !== targetShape) {
+      if (centerpiece) {
+        centerpiece.geometry.dispose();
+        centerpiece.geometry = buildShapeGeom(SHAPES[targetShape], 3.2);
+      }
+      if (centerInner) {
+        centerInner.geometry.dispose();
+        centerInner.geometry = buildShapeGeom(SHAPES[targetShape], 1.6);
+      }
+      currentShape = targetShape;
+    }
   }
 
   function spawnOrb(pitch, velocity, posOverride = null) {
@@ -303,21 +352,18 @@
     // Atmospheric fog so distant orbs fade gently. Gives a sense of depth.
     scene.fog = new THREE.FogExp2(0x000000, 0.04);
 
-    // Central slowly-rotating wireframe icosahedron. Low-contrast, just enough to give
-    // the scene a focal structure without being a gimmick.
-    const icoGeom = new THREE.IcosahedronGeometry(3.2, 1);
-    const icoEdges = new THREE.EdgesGeometry(icoGeom);
-    const icoMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.18 });
+    // Central slowly-morphing wireframe shape. Auto-cycles through 5 polyhedra; click advances.
+    const icoMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.22 });
     icoMat.color = accentVec3(moodRef);
-    centerpiece = new THREE.LineSegments(icoEdges, icoMat);
+    centerpiece = new THREE.LineSegments(buildShapeGeom(SHAPES[0], 3.2), icoMat);
     scene.add(centerpiece);
 
-    const inGeom = new THREE.IcosahedronGeometry(1.6, 0);
-    const inEdges = new THREE.EdgesGeometry(inGeom);
-    const inMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.32 });
+    const inMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.35 });
     inMat.color = accentVec3(moodRef);
-    centerInner = new THREE.LineSegments(inEdges, inMat);
+    centerInner = new THREE.LineSegments(buildShapeGeom(SHAPES[0], 1.6), inMat);
     scene.add(centerInner);
+
+    nextAutoMorphAt = performance.now() / 1000 + 25;
 
     // Connecting lines between nearby orbs (particles.js-style). Position buffer is rewritten
     // every frame from the current live orb positions.
@@ -352,9 +398,9 @@
       const pitch = 60 + Math.round(ny * 14);
       spawnOrb(pitch, 1.0, { x, y, z: -3 });
       spawnOrb(pitch + 7, 0.7, { x: x + 0.6, y: y + 0.4, z: -3 });
-      // Grow + pulse the focal geometry so users see their click affect the scene.
       clickGrowth = Math.min(0.8, clickGrowth + 0.08);
       clickPulseEnds = performance.now() / 1000 + 0.6;
+      triggerMorph();
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerleave', onPointerLeave);
@@ -384,18 +430,18 @@
       pointsMat.uniforms.uTime.value = t;
       const nowSec = performance.now() / 1000;
       const pulse = Math.max(0, clickPulseEnds - nowSec);
-      const pulseScale = 1 + pulse * 0.4;
-      const growScale = 1 + clickGrowth;
+      stepMorph(dt);
       if (centerpiece) {
         centerpiece.rotation.x = t * 0.05;
         centerpiece.rotation.y = t * 0.04;
-        centerpiece.scale.setScalar(growScale * pulseScale);
       }
       if (centerInner) {
         centerInner.rotation.x = -t * 0.07;
         centerInner.rotation.z = t * 0.05;
-        centerInner.scale.setScalar(growScale * (1 + pulse * 0.6));
       }
+      // Apply pulse on top of whatever stepMorph set.
+      if (morphPhase >= 1 && centerpiece) centerpiece.scale.setScalar((1 + clickGrowth) * (1 + pulse * 0.4));
+      if (morphPhase >= 1 && centerInner) centerInner.scale.setScalar((1 + clickGrowth) * (1 + pulse * 0.6));
       clickGrowth *= 0.998;
       camera.position.x = Math.sin(t * 0.04) * 0.8 + mouseSmoothed.x * 1.5;
       camera.position.y = Math.sin(t * 0.035 + 1.2) * 0.4 + mouseSmoothed.y * 0.9;
