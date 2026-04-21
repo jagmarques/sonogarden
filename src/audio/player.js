@@ -73,6 +73,16 @@ function ensureMasterChain() {
   return _sourceGain;
 }
 
+export function getMelodyBus() {
+  ensureVoices();
+  return _melodyGain;
+}
+
+export function getPadBus() {
+  ensureMasterChain();
+  return _sourceGain;
+}
+
 function ensureVoices() {
   if (_voices) return _voices;
   ensureMasterChain();
