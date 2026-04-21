@@ -181,11 +181,11 @@ function playPhrase(m) {
     const idx = Math.max(0, Math.min(pent.length - 1, tmpl[i]));
     const pitch = m.tonic + chord.root + pent[idx] + baseOctave + octaveJump;
     const arch = Math.sin((i / Math.max(1, n - 1)) * Math.PI);
-    const vel = 0.14 + arch * 0.22;
+    const vel = 0.28 + arch * 0.32;
     const when = jitter(i * stepMs, 30);
     setTimeout(() => {
       if (!_running) return;
-      triggerVoice(voiceKey, pitch, Math.max(0.08, Math.min(0.5, vel)), holdSec);
+      triggerVoice(voiceKey, pitch, Math.max(0.15, Math.min(0.75, vel)), holdSec);
     }, Math.max(0, when));
   }
 }
@@ -208,9 +208,9 @@ function scheduleDrone(m) {
   if (!key) { _lastDroneVoice = null; return; }
   const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
   const root = m.tonic + chord.root;
-  triggerVoice(key, root - 12, 0.32, 12.0);
-  if (Math.random() < 0.55) {
-    setTimeout(() => { if (_running) triggerVoice(key, root - 5, 0.22, 10.0); }, 1400);
+  triggerVoice(key, root - 12, 0.18, 14.0);
+  if (Math.random() < 0.4) {
+    setTimeout(() => { if (_running) triggerVoice(key, root - 5, 0.13, 12.0); }, 1600);
   }
   _lastDroneVoice = key;
   const nextMs = 9000 + Math.random() * 4000;
