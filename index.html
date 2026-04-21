@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0A0C" />
     <title>sonogarden - free ambient focus music</title>
     <meta name="description" content="Browser-only ambient focus music. AI composes, you listen. Free forever, no signup." />
     <meta property="og:title" content="sonogarden" />
@@ -11,9 +12,65 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      html, body { margin: 0; background: #0A0A0C; color: #E8C9A0; font-family: Inter, system-ui, sans-serif; }
+      #app { min-height: 100vh; min-height: 100dvh; }
+      #sono-boot-err {
+        display: none;
+        position: fixed;
+        inset: 0;
+        padding: 24px;
+        background: #0A0A0C;
+        color: #E8C9A0;
+        font-size: 13px;
+        line-height: 1.5;
+        z-index: 9999;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #sono-boot-err.on { display: block; }
+      #sono-boot-err h1 { font-size: 16px; margin: 0 0 10px; color: #FFB88C; }
+      #sono-boot-err button { margin-top: 12px; padding: 8px 14px; background: transparent; color: #E8C9A0; border: 1px solid #2A3A33; border-radius: 8px; font: inherit; cursor: pointer; }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="sono-boot-err" aria-live="polite" role="alert">
+      <h1>sonogarden hit a boot error</h1>
+      <div id="sono-boot-err-body"></div>
+      <button type="button" onclick="location.reload()">reload</button>
+    </div>
+    <script>
+      // Visible boot-error catch so mobile issues surface instead of a blank page.
+      (function () {
+        function show(msg) {
+          try {
+            var el = document.getElementById('sono-boot-err');
+            var body = document.getElementById('sono-boot-err-body');
+            if (!el || !body) return;
+            body.textContent = (body.textContent ? body.textContent + '\n\n' : '') + msg;
+            el.classList.add('on');
+          } catch (_) { /* ignore */ }
+        }
+        window.addEventListener('error', function (e) {
+          var msg = (e && e.message) || 'unknown error';
+          var src = (e && (e.filename || '')) + (e && e.lineno ? ':' + e.lineno : '');
+          show(msg + (src ? '\n' + src : ''));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          show('unhandled promise: ' + (r && (r.message || r.toString()) || 'unknown'));
+        });
+        // If the app hasn't mounted anything after 15s, surface that fact.
+        setTimeout(function () {
+          var app = document.getElementById('app');
+          if (app && !app.firstElementChild) {
+            show('sonogarden did not mount after 15s\nUA: ' + navigator.userAgent);
+          }
+        }, 15000);
+      })();
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
