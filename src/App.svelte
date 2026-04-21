@@ -109,14 +109,19 @@
     // Start Tone.start() synchronously inside the gesture chain (required by iOS Safari)
     // but do NOT block overlay dismissal on it. If the mobile browser hangs resolving the
     // start promise, the app still boots and the user sees the scene.
-    initAudio()
-      .then(() => setMood(activity))
-      .catch((err) => logError('initAudio failed', err));
     audioUnlocked = true;
     tuningInstruments = false;
     samplePercent = 100;
-    waitForVoicesLoaded().catch((err) => logError('voices load', err));
-    maybeStartAutoplay();
+    // Start autoplay only after Tone.start() has actually resolved so the AudioContext is
+    // confirmed running. On iOS a fire-and-forget start can schedule notes on a still-suspended
+    // context and produce silence even after the context later resumes.
+    initAudio()
+      .then(() => {
+        setMood(activity);
+        waitForVoicesLoaded().catch((err) => logError('voices load', err));
+        maybeStartAutoplay();
+      })
+      .catch((err) => logError('initAudio failed', err));
     startSessionTimer();
     if (listenTimer) clearInterval(listenTimer);
     listenTimer = setInterval(() => { listenSec += 1; }, 1000);
