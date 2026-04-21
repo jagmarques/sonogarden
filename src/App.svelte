@@ -158,6 +158,8 @@
     if (!name || !MOODS[name]) return;
     activity = name;
     setMood(name);
+    sessionSec = 0;
+    paused = false;
     if (typeof window !== 'undefined') {
       window.__lastMoodApplied = name;
       window.__moodApplyCount = (window.__moodApplyCount || 0) + 1;
@@ -484,8 +486,8 @@
     left: 16px;
     z-index: 45;
     display: flex;
-    gap: 8px;
-    align-items: baseline;
+    gap: 10px;
+    align-items: center;
     font-family: var(--font);
     font-size: 12px;
     color: color-mix(in srgb, var(--iris) 75%, transparent);
@@ -501,33 +503,34 @@
     color: color-mix(in srgb, #E8C9A0 90%, transparent);
   }
   .np-chord {
-    font-size: 11px;
+    font-size: 12px;
     color: color-mix(in srgb, var(--iris) 60%, transparent);
   }
   .timer {
     font-family: var(--font);
-    font-size: 12px;
-    color: color-mix(in srgb, #E8C9A0 75%, transparent);
-    padding: 4px 10px;
-    background: color-mix(in srgb, #14191C 70%, transparent);
-    border: 1px solid color-mix(in srgb, #2A3A33 70%, transparent);
+    font-size: 22px;
+    font-weight: 500;
+    color: color-mix(in srgb, #E8C9A0 90%, transparent);
+    padding: 8px 18px;
+    background: color-mix(in srgb, #14191C 75%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 75%, transparent);
     border-radius: 9999px;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
   }
   .transport-btn {
     pointer-events: auto;
-    width: 28px;
-    height: 28px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, #14191C 70%, transparent);
+    background: color-mix(in srgb, #14191C 75%, transparent);
     border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
     border-radius: 9999px;
-    color: color-mix(in srgb, #E8C9A0 75%, transparent);
-    font-size: 11px;
+    color: color-mix(in srgb, #E8C9A0 85%, transparent);
+    font-size: 16px;
     cursor: pointer;
   }
   .transport-btn:hover, .transport-btn:focus-visible {
