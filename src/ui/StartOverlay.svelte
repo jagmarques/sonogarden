@@ -39,6 +39,8 @@
   aria-disabled={tuning}
   aria-label={tuning ? 'Tuning instruments' : 'Tap to wake the garden'}
   onpointerdown={unlock}
+  ontouchstart={unlock}
+  onclick={unlock}
 >
   <div class="inner">
     {#if tuning}
@@ -80,6 +82,9 @@
     color: var(--petal);
     z-index: 100;
     animation: fade-in 600ms ease-out both;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .overlay.reduced {
     animation: fade-in 80ms linear both;
