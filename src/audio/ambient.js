@@ -217,22 +217,18 @@ function scheduleDrone(m) {
   _droneTimer = setTimeout(() => scheduleDrone(getCurrentMood()), nextMs);
 }
 
-// Schedule the next chime with a much longer base gap and a real "silent rest" probability.
-// Ambient music breathes: sometimes no phrase fires at all and the pad carries the minute.
+// Schedule the next chime. Music plays continuously: every slot fires a phrase.
 function scheduleChime() {
   if (!_running) return;
   const mood = getCurrentMood();
-  const [lo, hi] = mood.chimeMs || [12000, 22000];
-  const gap = lo + Math.random() * (hi - lo);
-  const nextMs = gap + (Math.random() < 0.28 ? gap * (0.8 + Math.random()) : 0);
+  const [lo, hi] = mood.chimeMs || [9000, 16000];
+  const nextMs = lo + Math.random() * (hi - lo);
   _chimeTimer = setTimeout(() => {
     if (!_running) return;
     const m = getCurrentMood();
-    if (Math.random() < 0.75) {
-      playPhrase(m);
-      if (Math.random() < 0.08) {
-        setTimeout(() => { if (_running) playShimmer(getCurrentMood()); }, 2200 + Math.random() * 1500);
-      }
+    playPhrase(m);
+    if (Math.random() < 0.1) {
+      setTimeout(() => { if (_running) playShimmer(getCurrentMood()); }, 2200 + Math.random() * 1500);
     }
     scheduleChime();
   }, nextMs);
