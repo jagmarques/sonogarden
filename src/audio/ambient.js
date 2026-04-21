@@ -134,8 +134,30 @@ function emitPadChord(mood) {
   }
 }
 
-// Plays a real chord on the mood's phrase voice. opts.chord (override the current chord),
-// opts.intensity (0.6 = anticipation soft, 1.0 = main hit, 0.4 = pedal echo).
+// Voice-leading state: last set of chord pitches we played, used to pick the closest
+// next-chord voicing (the "law of the shortest way").
+let _lastVoicing = null;
+
+function nearest(arr, target) {
+  if (!arr || !arr.length) return target;
+  return arr.reduce((a, b) => Math.abs(b - target) < Math.abs(a - target) ? b : a);
+}
+
+// For a target pitch, choose the octave transposition (-12, 0, +12) closest to any
+// previously-played pitch. Holds common tones, otherwise moves by step.
+function closestVoicing(targetPitches, prevPitches) {
+  if (!prevPitches) return targetPitches;
+  return targetPitches.map((p) => {
+    const cands = [p - 12, p, p + 12];
+    return cands.reduce((best, cand) =>
+      Math.abs(cand - nearest(prevPitches, cand)) < Math.abs(best - nearest(prevPitches, best))
+        ? cand : best);
+  });
+}
+
+// Plays a real chord on the mood's phrase voice with VOICE LEADING from the previous chord.
+// Common tones stay where they are; new tones pick the nearest octave. opts.chord (override),
+// opts.intensity (0.45 = anticipation soft, 1.0 = main hit), opts.persist (update voicing state).
 function playPhraseChord(m, opts = {}) {
   const voiceKey = m.phraseVoice || 'harp';
   const chord = opts.chord || _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
@@ -143,10 +165,12 @@ function playPhraseChord(m, opts = {}) {
   const intervals = [...triad, 11];
   const baseOctave = (VOICE_OCTAVE[voiceKey] ?? 12);
   const root = m.tonic + chord.root + baseOctave;
+  const rawPitches = intervals.map((iv) => root + iv);
+  const ledPitches = closestVoicing(rawPitches, _lastVoicing);
   const intensity = opts.intensity ?? 1.0;
   const myGen = _gen;
-  for (let i = 0; i < intervals.length; i++) {
-    const pitch = root + intervals[i];
+  for (let i = 0; i < ledPitches.length; i++) {
+    const pitch = ledPitches[i];
     const stagger = i * 35;
     const vel = (0.22 - i * 0.02) * intensity;
     setTimeout(() => {
@@ -154,6 +178,44 @@ function playPhraseChord(m, opts = {}) {
       triggerVoice(voiceKey, pitch, Math.max(0.06, vel), 4.5);
     }, stagger);
   }
+  if (opts.persist !== false) _lastVoicing = ledPitches;
+}
+
+// Suspension bridge: hold the highest pitch of the OLD chord across the change for ~1.4s,
+// then resolve it down by step into a chord tone of the NEW chord. Turns a chord cut into
+// a 3-second crossfade. SOURCE: Suspension_(music) on Wikipedia.
+function playSuspensionBridge(m, prevVoicing, newChord) {
+  if (!prevVoicing || !prevVoicing.length) return;
+  const voiceKey = m.phraseVoice || 'harp';
+  const myGen = _gen;
+  const heldPitch = Math.max(...prevVoicing);
+  triggerVoice(voiceKey, heldPitch, 0.16, 3.5);
+  setTimeout(() => {
+    if (!_running || _gen !== myGen) return;
+    triggerVoice(voiceKey, heldPitch - 2, 0.14, 4.0);
+  }, 1400);
+}
+
+// Slow arpeggio under the phrase. Pattern: root, fifth+oct, third, fifth+oct over cycleMs.
+// Continuous low-velocity figuration so silence between phrase notes is bridged.
+// SOURCE: Alberti_bass on Wikipedia (slowed for ambient).
+function playArpAccompaniment(m, cycleMs = 2400) {
+  const voiceKey = m.phraseVoice || 'harp';
+  const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
+  const triad = chord.type === 'min' ? [0, 3, 7] : [0, 4, 7];
+  const baseOctave = (VOICE_OCTAVE[voiceKey] ?? 12) - 12;
+  const r = m.tonic + chord.root + baseOctave;
+  const t = r + triad[1];
+  const f = r + triad[2];
+  const pattern = [r, f + 12, t, f + 12];
+  const step = cycleMs / pattern.length;
+  const myGen = _gen;
+  pattern.forEach((p, i) => {
+    setTimeout(() => {
+      if (!_running || _gen !== myGen) return;
+      triggerVoice(voiceKey, p, 0.13, (step / 1000) * 2.6);
+    }, i * step);
+  });
 }
 
 // Sustained low-octave tonic that holds across chord changes. Eno-style pedal point
@@ -173,26 +235,42 @@ function schedulePedal(m) {
   fire();
 }
 
+// Each chord change picks ONE strategy from the menu, weighted. Most changes are silent
+// pad shifts (let the melody and pedal carry continuity); a minority get an anticipation,
+// suspension bridge, or arpeggio gesture. No chord stab on every change.
 function scheduleChordDrift(mood) {
   if (!_running) return;
   const [lo, hi] = mood.chordChangeMs || [22000, 38000];
   const nextMs = lo + Math.random() * (hi - lo);
-  const anticipateMs = Math.max(1200, nextMs - 1700);
   const myGen = _gen;
-  // Anticipation: 1.7s before the actual chord change, play the upcoming chord softly so
-  // the ear is led into the change instead of jumping. Voice-leading prep.
-  setTimeout(() => {
-    if (!_running || _gen !== myGen) return;
-    const m = getCurrentMood();
-    const next = peekNextChord(m);
-    playPhraseChord(m, { chord: next, intensity: 0.45 });
-  }, anticipateMs);
+  const strategy = Math.random();
+  // Anticipation: soft preview of the upcoming chord 1.6s before the change.
+  if (strategy < 0.28) {
+    const anticipateMs = Math.max(1000, nextMs - 1600);
+    setTimeout(() => {
+      if (!_running || _gen !== myGen) return;
+      const m = getCurrentMood();
+      const next = peekNextChord(m);
+      playPhraseChord(m, { chord: next, intensity: 0.4, persist: false });
+    }, anticipateMs);
+  }
   _chordTimer = setTimeout(() => {
     if (!_running || _gen !== myGen) return;
     const m = getCurrentMood();
+    const prevVoicing = _lastVoicing;
     pickNextChord(m);
     emitPadChord(m);
-    playPhraseChord(m);
+    if (strategy < 0.18) {
+      // Suspension bridge: hold an old voice into the new chord, then resolve down.
+      playSuspensionBridge(m, prevVoicing, _currentChord);
+    } else if (strategy < 0.42) {
+      // Soft arpeggio under the new chord.
+      playArpAccompaniment(m, 2600);
+    } else if (strategy < 0.55) {
+      // Quiet voiced chord using closest-voicing.
+      playPhraseChord(m, { intensity: 0.55 });
+    }
+    // Otherwise: pad chord swap only, no piano gesture. Let pedal + melody carry it.
     scheduleChordDrift(m);
   }, nextMs);
 }
