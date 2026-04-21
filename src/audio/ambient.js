@@ -40,6 +40,17 @@ let _chimeTimer = null;
 function triadFor(type) {
   return type === 'min' ? MINOR_TRIAD : MAJOR_TRIAD;
 }
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+// Returns "C major", "A minor", etc for the currently playing chord.
+export function getCurrentChordLabel() {
+  if (!_currentChord) return '';
+  const mood = getCurrentMood();
+  const midi = mood.tonic + _currentChord.root;
+  const name = NOTE_NAMES[((midi % 12) + 12) % 12];
+  return `${name} ${_currentChord.type === 'min' ? 'minor' : 'major'}`;
+}
 function pentFor(mood) {
   return mood.scale === 'minor' ? MINOR_PENT : MAJOR_PENT;
 }
