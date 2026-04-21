@@ -5,7 +5,7 @@
 // No beat grid. No metered progression. Everything on independent slow timers.
 
 import * as Tone from 'tone';
-import { triggerHarp, getMelodyBus, getPadBus } from './player.js';
+import { triggerVoice, getMelodyBus, getPadBus, getVoice } from './player.js';
 import { getCurrentMood } from './moods.js';
 
 const MAJOR_TRIAD = [0, 4, 7];
@@ -35,6 +35,8 @@ let _noiseGain = null;
 let _currentChord = null;
 let _chordTimer = null;
 let _chimeTimer = null;
+let _droneTimer = null;
+let _lastDroneVoice = null;
 
 function triadFor(type) {
   return type === 'min' ? MINOR_TRIAD : MAJOR_TRIAD;
@@ -145,36 +147,74 @@ function jitter(baseMs, amtMs = 40) {
   return baseMs + (Math.random() - 0.5) * amtMs * 2;
 }
 
-// Play a musical phrase: pick a template, choose a tempo for this phrase, play with an
-// arch dynamic shape (soft-louder-soft). Silence between notes within the phrase is
-// deliberate and uniform, not random.
+// Per-voice phrase tempo ranges. Bowed and reeded instruments want longer note spacing
+// than plucked ones so the attack envelope has room to speak.
+const VOICE_TEMPO = {
+  piano:       [320, 580],
+  harp:        [300, 540],
+  cello:       [700, 1200],
+  guitarNylon: [450, 780],
+  harmonium:   [900, 1500],
+};
+
+// Per-voice octave offsets relative to mood tonic. Keeps each instrument in its best range.
+const VOICE_OCTAVE = {
+  piano:       12,
+  harp:        12,
+  cello:       0,
+  guitarNylon: 0,
+  harmonium:   0,
+};
+
 function playPhrase(m) {
+  const voiceKey = m.phraseVoice || 'harp';
   const pent = pentFor(m);
   const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
   const tmpl = PHRASES[Math.floor(Math.random() * PHRASES.length)];
-  const baseOctave = 12 + (Math.random() < 0.18 ? 12 : 0);
-  const stepMs = 320 + Math.random() * 260;
+  const baseOctave = VOICE_OCTAVE[voiceKey] ?? 12;
+  const octaveJump = Math.random() < 0.15 ? 12 : 0;
+  const [tLo, tHi] = VOICE_TEMPO[voiceKey] || [320, 580];
+  const stepMs = tLo + Math.random() * (tHi - tLo);
+  const holdSec = (stepMs / 1000) * 2.2 + 1.0;
   const n = tmpl.length;
   for (let i = 0; i < n; i++) {
     const idx = Math.max(0, Math.min(pent.length - 1, tmpl[i]));
-    const pitch = m.tonic + chord.root + pent[idx] + baseOctave;
+    const pitch = m.tonic + chord.root + pent[idx] + baseOctave + octaveJump;
     const arch = Math.sin((i / Math.max(1, n - 1)) * Math.PI);
-    const vel = 0.16 + arch * 0.22;
+    const vel = 0.14 + arch * 0.22;
     const when = jitter(i * stepMs, 30);
     setTimeout(() => {
       if (!_running) return;
-      triggerHarp(pitch, Math.max(0.08, Math.min(0.5, vel)), 3.2);
+      triggerVoice(voiceKey, pitch, Math.max(0.08, Math.min(0.5, vel)), holdSec);
     }, Math.max(0, when));
   }
 }
 
-// Very rare high single-note shimmer. Adds sparkle without clutter.
 function playShimmer(m) {
+  const key = m.shimmerVoice;
+  if (!key) return;
   const pent = pentFor(m);
   const root = (_currentChord && _currentChord.root) || 0;
   const n = pent[Math.floor(Math.random() * pent.length)];
   const pitch = m.tonic + root + n + 36;
-  triggerHarp(pitch, 0.22, 5.0);
+  triggerVoice(key, pitch, 0.18, 4.5);
+}
+
+// Re-trigger the low drone voice (contrabass / cello / harmonium). Each strike is held
+// long enough to overlap the next one so the drone sounds continuous, not pulsed.
+function scheduleDrone(m) {
+  if (!_running) return;
+  const key = m.droneVoice;
+  if (!key) { _lastDroneVoice = null; return; }
+  const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
+  const root = m.tonic + chord.root;
+  triggerVoice(key, root - 12, 0.32, 12.0);
+  if (Math.random() < 0.55) {
+    setTimeout(() => { if (_running) triggerVoice(key, root - 5, 0.22, 10.0); }, 1400);
+  }
+  _lastDroneVoice = key;
+  const nextMs = 9000 + Math.random() * 4000;
+  _droneTimer = setTimeout(() => scheduleDrone(getCurrentMood()), nextMs);
 }
 
 // Schedule the next chime with a much longer base gap and a real "silent rest" probability.
@@ -205,16 +245,17 @@ export function startAmbient() {
   ensureNoise();
   pickNextChord(mood);
   emitPadChord(mood);
-  // Gentle opening phrase after ~2s so the instrument announces itself once, then breathes.
   setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 2000);
   scheduleChordDrift(mood);
   scheduleChime();
+  if (mood.droneVoice) scheduleDrone(mood);
 }
 
 export function stopAmbient() {
   _running = false;
   if (_chordTimer) { clearTimeout(_chordTimer); _chordTimer = null; }
   if (_chimeTimer) { clearTimeout(_chimeTimer); _chimeTimer = null; }
+  if (_droneTimer) { clearTimeout(_droneTimer); _droneTimer = null; }
   if (_padSynth) { try { _padSynth.releaseAll(); } catch (_) { /* ignore */ } }
 }
 
@@ -223,6 +264,7 @@ export function onMoodChange() {
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
-  // Short pause then a phrase, so the mood change is audible without feeling jumpy.
   setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 1200);
+  if (_droneTimer) { clearTimeout(_droneTimer); _droneTimer = null; }
+  if (mood.droneVoice) scheduleDrone(mood);
 }
