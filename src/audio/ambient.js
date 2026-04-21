@@ -82,6 +82,13 @@ export function setPadVolume(db) {
   }
 }
 
+// Pink noise at -30 dB lowpassed at 800 Hz. The strongest peer-reviewed background-tone
+// finding is for pink noise at low SPL during slow-wave sleep (Papalambros 2017,
+// Papalambros/Malkani 2019); for focus the JAACAP 2024 meta-analysis shows a small benefit
+// in ADHD listeners only. Brown noise has zero RCT support, white noise has known REM and
+// hearing risks (PMC scoping review 2024). Pink stays.
+// SOURCES: pubmed.ncbi.nlm.nih.gov/28337134, onlinelibrary.wiley.com/doi/10.1002/acn3.796,
+//          pubmed.ncbi.nlm.nih.gov/38428577, pubmed.ncbi.nlm.nih.gov/38663282
 function ensureNoise() {
   if (_noise) return;
   const dest = getMelodyBus();
@@ -216,20 +223,21 @@ function playShimmer(m) {
   triggerVoice(key, pitch, 0.18, 4.5);
 }
 
-// Re-trigger the low drone voice (contrabass / cello / harmonium). Each strike is held
-// long enough to overlap the next one so the drone sounds continuous, not pulsed.
+// Tanpura-style drone: re-triggers the mood's drone voice on the mood TONIC (not the
+// current chord root) plus its perfect fifth. Tonic-centred so the bed never wanders, the
+// chord progression handles motion. Hold time exceeds re-trigger interval so each note
+// overlaps the next and the drone reads as continuous, not pulsed (per the science: real
+// tanpura is sustained; pulsed drones add unwanted rhythm).
+// SOURCE: pmc.ncbi.nlm.nih.gov/articles/PMC10754644 (tanpura EEG alpha/theta complexity).
 function scheduleDrone(m) {
   if (!_running) return;
   const key = m.droneVoice;
   if (!key) { _lastDroneVoice = null; return; }
-  const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
-  const root = m.tonic + chord.root;
-  triggerVoice(key, root - 12, 0.18, 14.0);
-  if (Math.random() < 0.4) {
-    setTimeout(() => { if (_running) triggerVoice(key, root - 5, 0.13, 12.0); }, 1600);
-  }
+  const root = m.tonic;
+  triggerVoice(key, root - 12, 0.16, 18.0);
+  setTimeout(() => { if (_running) triggerVoice(key, root - 5, 0.11, 16.0); }, 2000);
   _lastDroneVoice = key;
-  const nextMs = 9000 + Math.random() * 4000;
+  const nextMs = 7500 + Math.random() * 2500;
   _droneTimer = setTimeout(() => scheduleDrone(getCurrentMood()), nextMs);
 }
 
