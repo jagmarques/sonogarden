@@ -167,6 +167,15 @@ function playOneChime(m) {
   }
 }
 
+// High shimmer: a single very-high pentatonic note with extra reverb tail, fires rarely.
+function playShimmer(m) {
+  const pent = pentFor(m);
+  const root = (_currentChord && _currentChord.root) || 0;
+  const n = pent[Math.floor(Math.random() * pent.length)];
+  const pitch = m.tonic + root + n + 36;
+  triggerHarp(pitch, 0.35, 4.5);
+}
+
 function scheduleChime() {
   if (!_running) return;
   const mood = getCurrentMood();
@@ -175,6 +184,9 @@ function scheduleChime() {
   _chimeTimer = setTimeout(() => {
     if (!_running) return;
     playOneChime(getCurrentMood());
+    if (Math.random() < 0.25) {
+      setTimeout(() => { if (_running) playShimmer(getCurrentMood()); }, 600 + Math.random() * 800);
+    }
     scheduleChime();
   }, nextMs);
 }
