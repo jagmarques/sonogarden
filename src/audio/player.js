@@ -89,6 +89,13 @@ export function getPadBus() {
   return _sourceGain;
 }
 
+// Returns a named voice (piano, harp, cello, harmonium, contrabass, guitarNylon, frenchHorn).
+// Async callers should await waitForVoicesLoaded first if they need the sampler ready.
+export function getVoice(key) {
+  const v = ensureVoices();
+  return v ? v[key] : null;
+}
+
 function ensureVoices() {
   if (_voices) return _voices;
   ensureMasterChain();
@@ -286,19 +293,37 @@ function midiToFreq(pitch) {
 export function startDrone() { /* no drone in the calm build */ }
 export function stopDrone() { /* no drone */ }
 
-// Trigger a single harp note. Shared entry point for the ambient engine.
-export async function triggerHarp(pitch, velocity = 0.5, duration = 2.5, atTime = null) {
+// Per-voice safe pitch ranges. Outside these ranges Tone.Sampler stretches awkwardly.
+const VOICE_RANGES = {
+  piano: [36, 96],
+  harp: [48, 84],
+  cello: [36, 72],
+  harmonium: [36, 72],
+  contrabass: [28, 55],
+  guitarNylon: [40, 76],
+  frenchHorn: [40, 72],
+};
+
+function clampToRange(pitch, key) {
+  const r = VOICE_RANGES[key] || [48, 84];
+  let p = pitch;
+  while (p < r[0]) p += 12;
+  while (p > r[1]) p -= 12;
+  return p;
+}
+
+// Trigger a single note on a named voice (piano, harp, cello, harmonium, etc.). Shared
+// entry point for the ambient engine; the mood descriptor picks which voice to call.
+export async function triggerVoice(voiceKey, pitch, velocity = 0.5, duration = 2.5, atTime = null) {
   await initAudio();
   if (!contextRunning()) return;
   const voices = ensureVoices();
-  const piano = voices.piano;
-  if (!piano) return;
-  let p = pitch;
-  while (p < 48) p += 12;
-  while (p > 84) p -= 12;
+  const v = voices[voiceKey];
+  if (!v) return;
+  const p = clampToRange(pitch, voiceKey);
   const when = typeof atTime === 'number' ? atTime : Tone.now() + 0.02;
   try {
-    piano.synth.triggerAttackRelease(midiToFreq(p), duration, when, velocity);
+    v.synth.triggerAttackRelease(midiToFreq(p), duration, when, velocity);
     emitNote({ pitch: p, velocity, duration, atMs: Date.now() });
     if (typeof window !== 'undefined') {
       window.__sonoStats = window.__sonoStats || { notes: 0, plays: 0, drones: 0 };
@@ -306,8 +331,13 @@ export async function triggerHarp(pitch, velocity = 0.5, duration = 2.5, atTime 
       window.__sonoStats.lastAt = Date.now();
     }
   } catch (err) {
-    debug('triggerHarp failed', err);
+    debug('triggerVoice failed', err);
   }
+}
+
+// Backwards-compatible: trigger on the harp specifically.
+export async function triggerHarp(pitch, velocity = 0.5, duration = 2.5, atTime = null) {
+  return triggerVoice('harp', pitch, velocity, duration, atTime);
 }
 
 // Plays a MusicVAE INoteSequence. Start times are in seconds at the sequence's qpm.

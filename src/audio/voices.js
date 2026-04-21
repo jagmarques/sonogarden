@@ -41,31 +41,45 @@ function buildSamplerVoice(name, urls, opts = {}) {
   };
 }
 
-// Sparse 5-sample map so the page is playable on mobile data (fewer HTTP requests).
-// Tone.Sampler interpolates across gaps. Sample list WebFetch-verified from the CDN's
-// samples/harp/ directory listing (see companion comment at top).
-const HARP_URLS = Object.freeze({
-  C3: 'C3.mp3',
-  G3: 'G3.mp3',
-  C5: 'C5.mp3',
-  G5: 'G5.mp3',
-  D6: 'D6.mp3',
-});
+// Sparse sample maps keep mobile data footprint small. Tone.Sampler interpolates across gaps.
+// Pitch inventory verified from github.com/nbrosowsky/tonejs-instruments samples directory.
+const HARP_URLS = Object.freeze({ C3: 'C3.mp3', G3: 'G3.mp3', C5: 'C5.mp3', G5: 'G5.mp3', D6: 'D6.mp3' });
+const PIANO_URLS = Object.freeze({ C3: 'C3.mp3', G3: 'G3.mp3', C4: 'C4.mp3', G4: 'G4.mp3', C5: 'C5.mp3' });
+const CELLO_URLS = Object.freeze({ C2: 'C2.mp3', G2: 'G2.mp3', C3: 'C3.mp3', G3: 'G3.mp3', C4: 'C4.mp3' });
+const HARMONIUM_URLS = Object.freeze({ C2: 'C2.mp3', C3: 'C3.mp3', G3: 'G3.mp3', C4: 'C4.mp3' });
+const CONTRABASS_URLS = Object.freeze({ G1: 'G1.mp3', C2: 'C2.mp3', E2: 'E2.mp3', A2: 'A2.mp3', E3: 'E3.mp3' });
+const GUITAR_NYLON_URLS = Object.freeze({ E2: 'E2.mp3', A2: 'A2.mp3', D3: 'D3.mp3', G3: 'G3.mp3', B3: 'B3.mp3', E4: 'E4.mp3' });
+const FRENCH_HORN_URLS = Object.freeze({ C2: 'C2.mp3', D3: 'D3.mp3', F3: 'F3.mp3', A3: 'A3.mp3', C4: 'C4.mp3' });
 
-function createHarpVoice(masterDest) {
-  const v = buildSamplerVoice('harp', HARP_URLS, { attack: 0.01, release: 2.6 });
-  if (masterDest) v.connect(masterDest);
+function make(name, urls, opts, dest) {
+  const v = buildSamplerVoice(name, urls, opts);
+  if (dest) v.connect(dest);
   return v;
 }
 
 export function buildAllVoices(destinationNode) {
-  const harp = createHarpVoice(destinationNode);
+  const harp = make('harp', HARP_URLS, { attack: 0.01, release: 2.6, gain: 0.55 }, destinationNode);
+  const piano = make('piano', PIANO_URLS, { attack: 0.005, release: 1.8, gain: 0.45 }, destinationNode);
+  const cello = make('cello', CELLO_URLS, { attack: 0.15, release: 1.8, gain: 0.42 }, destinationNode);
+  const harmonium = make('harmonium', HARMONIUM_URLS, { attack: 0.25, release: 2.2, gain: 0.28 }, destinationNode);
+  const contrabass = make('contrabass', CONTRABASS_URLS, { attack: 0.2, release: 2.4, gain: 0.4 }, destinationNode);
+  const guitarNylon = make('guitar-nylon', GUITAR_NYLON_URLS, { attack: 0.005, release: 2.0, gain: 0.5 }, destinationNode);
+  const frenchHorn = make('french-horn', FRENCH_HORN_URLS, { attack: 0.3, release: 2.6, gain: 0.3 }, destinationNode);
+
+  const all = [harp, piano, cello, harmonium, contrabass, guitarNylon, frenchHorn];
+  const loaded = Promise.all(all.map((v) => v.loaded)).then(() => undefined);
+
   return {
-    piano: harp,
     harp,
-    loaded: harp.loaded,
+    piano,
+    cello,
+    harmonium,
+    contrabass,
+    guitarNylon,
+    frenchHorn,
+    loaded,
     dispose() {
-      try { harp.dispose(); } catch (_) { /* ignore */ }
+      for (const v of all) { try { v.dispose(); } catch (_) { /* ignore */ } }
     },
   };
 }
