@@ -8,7 +8,7 @@ import { setPadVolume } from './ambient.js';
 
 const DEBUG = false;
 const MASTER_LIMITER_THRESHOLD_DB = -3;
-const MASTER_GAIN_DB = -5;
+const MASTER_GAIN_DB = 0;
 const DEFAULT_QPM = 80;
 const DRONE_GAIN_DB = -44;
 const MELODY_GAIN_DB = 0;
