@@ -368,10 +368,18 @@
     <div class="now-playing" aria-live="polite">
       {#if chordLabel}<span class="np-chord">{chordLabel}</span>{/if}
       <span class="timer">{fmtTime(sessionSec)}</span>
+    </div>
+    <div class="transport-bar">
       <button type="button" class="transport-btn" onclick={togglePause} aria-label={paused ? 'play' : 'pause'}>
-        {paused ? '▶' : '❚❚'}
+        {#if paused}
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M7 5 L19 12 L7 19 Z" fill="currentColor" /></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><rect x="6" y="5" width="4" height="14" fill="currentColor" /><rect x="14" y="5" width="4" height="14" fill="currentColor" /></svg>
+        {/if}
       </button>
-      <button type="button" class="transport-btn" onclick={restartSession} aria-label="restart">↻</button>
+      <button type="button" class="transport-btn" onclick={restartSession} aria-label="restart">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M12 5 A7 7 0 1 1 5 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /><path d="M12 2 L12 8 L7 5 Z" fill="currentColor" /></svg>
+      </button>
     </div>
   {/if}
 
@@ -518,20 +526,27 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
   }
+  .transport-bar {
+    position: fixed;
+    bottom: 16px;
+    right: 72px;
+    display: flex;
+    gap: 8px;
+    z-index: 50;
+    pointer-events: auto;
+  }
   .transport-btn {
     pointer-events: auto;
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, #14191C 75%, transparent);
-    border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
+    background: transparent;
+    border: 1px solid var(--moss);
     border-radius: 9999px;
-    color: color-mix(in srgb, #E8C9A0 90%, transparent);
-    font-size: 22px;
-    line-height: 1;
+    color: var(--petal);
     cursor: pointer;
   }
   .transport-btn:hover, .transport-btn:focus-visible {
