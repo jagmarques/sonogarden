@@ -45,6 +45,9 @@
   let dragActive = false;
   let dragPrevX = 0, dragPrevY = 0;
   let sceneYaw = 0, scenePitch = 0;
+  let camZoom = 14;
+  const CAM_Z_MIN = 6;
+  const CAM_Z_MAX = 26;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -509,15 +512,26 @@
       clickGrowth = Math.min(0.8, clickGrowth + 0.08);
       clickPulseEnds = performance.now() / 1000 + 0.6;
       triggerMorph();
+      // Radial shockwave: 10 orbs fly outward from the click point.
+      for (let k = 0; k < 10; k++) {
+        const ang = (k / 10) * Math.PI * 2;
+        const rr = 3 + Math.random() * 2;
+        spawnOrb(60 + k, 0.8, { x: x + Math.cos(ang) * rr, y: y + Math.sin(ang) * rr * 0.75, z: -3 });
+      }
       dragActive = true;
       dragPrevX = ev.clientX;
       dragPrevY = ev.clientY;
+    };
+    const onWheel = (ev) => {
+      ev.preventDefault();
+      camZoom = Math.max(CAM_Z_MIN, Math.min(CAM_Z_MAX, camZoom + ev.deltaY * 0.01));
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerleave', onPointerLeave);
     window.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('resize', resize);
     hostEl.__cleanupPointers = () => {
       window.removeEventListener('pointermove', onPointerMove);
@@ -525,6 +539,7 @@
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('wheel', onWheel);
     };
 
     const loop = () => {
@@ -562,7 +577,7 @@
       clickGrowth *= 0.998;
       camera.position.x = Math.sin(t * 0.04) * 0.8 + mouseSmoothed.x * 1.5;
       camera.position.y = Math.sin(t * 0.035 + 1.2) * 0.4 + mouseSmoothed.y * 0.9;
-      camera.position.z = 14;
+      camera.position.z = camZoom;
       camera.lookAt(mouseSmoothed.x * 0.3, mouseSmoothed.y * 0.2, 0);
       // Drag-driven scene rotation so the user can look around the geometry 360 degrees.
       scene.rotation.y = sceneYaw;
