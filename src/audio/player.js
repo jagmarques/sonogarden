@@ -20,6 +20,7 @@ let _masterGain = null;
 let _hpf = null;
 let _compressor = null;
 let _reverb = null;
+let _delay = null;
 let _limiter = null;
 
 let _voices = null;
@@ -52,6 +53,9 @@ function ensureMasterChain() {
   _limiter = new Tone.Limiter(MASTER_LIMITER_THRESHOLD_DB);
   _reverb = new Tone.Reverb({ decay: 6.0, preDelay: 0.03 });
   _reverb.wet.value = 0.45;
+  // Tape-style feedback echo. Wet is modulated per mood in setMood.
+  _delay = new Tone.FeedbackDelay({ delayTime: 0.4, feedback: 0.35 });
+  _delay.wet.value = 0.2;
   _compressor = new Tone.Compressor({
     threshold: -18,
     ratio: 3,
@@ -66,7 +70,8 @@ function ensureMasterChain() {
   _sourceGain.connect(_masterGain);
   _masterGain.connect(_hpf);
   _hpf.connect(_compressor);
-  _compressor.connect(_reverb);
+  _compressor.connect(_delay);
+  _delay.connect(_reverb);
   _reverb.connect(_limiter);
   _limiter.connect(Tone.getDestination());
 
@@ -161,10 +166,15 @@ export function setMood(name) {
   const m = MOODS[name];
   if (!m) return null;
   setCurrentMood(name);
-  try { transport().bpm.rampTo(m.bpm, 0.5); } catch (_) { /* pre-init */ }
+  try { if (m.bpm) transport().bpm.rampTo(m.bpm, 0.5); } catch (_) { /* pre-init */ }
   if (_reverb) {
     try { _reverb.decay = m.reverbDecay; } catch (_) { /* ignore */ }
     try { _reverb.wet.rampTo(m.reverbWet, 0.5); } catch (_) { /* ignore */ }
+  }
+  if (_delay) {
+    try { _delay.delayTime.rampTo(m.delayTime ?? 0.4, 0.8); } catch (_) { /* ignore */ }
+    try { _delay.feedback.rampTo(m.delayFeedback ?? 0.3, 0.8); } catch (_) { /* ignore */ }
+    try { _delay.wet.rampTo(m.delayWet ?? 0.2, 0.8); } catch (_) { /* ignore */ }
   }
   return m;
 }

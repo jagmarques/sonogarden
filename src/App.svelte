@@ -35,6 +35,46 @@
   let showIntro = $state(false);
   let introSlide = $state(0);
   let chordPollTimer = null;
+  let paused = $state(false);
+  let sessionSec = $state(0);
+  let sessionTimer = null;
+
+  function fmtTime(total) {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function startSessionTimer() {
+    if (sessionTimer) return;
+    sessionTimer = setInterval(() => {
+      if (!paused) sessionSec += 1;
+    }, 1000);
+  }
+  function stopSessionTimer() {
+    if (sessionTimer) { clearInterval(sessionTimer); sessionTimer = null; }
+  }
+
+  function togglePause() {
+    if (!audioUnlocked) return;
+    paused = !paused;
+    if (paused) {
+      stopAutoplay();
+      stopAll();
+    } else {
+      startAutoplay({ onMelody: handleMelody }).catch((err) => logError('resume autoplay failed', err));
+    }
+  }
+
+  function restartSession() {
+    sessionSec = 0;
+    paused = false;
+    try {
+      stopAutoplay();
+      stopAll();
+    } catch (_) { /* ignore */ }
+    startAutoplay({ onMelody: handleMelody }).catch((err) => logError('restart failed', err));
+  }
 
   const muted = $derived(gardenState.muted);
 
@@ -91,6 +131,7 @@
     }
     tuningInstruments = false;
     maybeStartAutoplay();
+    startSessionTimer();
     if (listenTimer) clearInterval(listenTimer);
     listenTimer = setInterval(() => { listenSec += 1; }, 1000);
     if (chordPollTimer) clearInterval(chordPollTimer);
@@ -234,6 +275,7 @@
     try { stopAutoplay(); stopAll(); } catch (_) { /* ignore */ }
     if (listenTimer) { clearInterval(listenTimer); listenTimer = null; }
     if (chordPollTimer) { clearInterval(chordPollTimer); chordPollTimer = null; }
+    stopSessionTimer();
   }
 
   function handleVisibilityChange() {
@@ -320,9 +362,14 @@
 
   <MuteButton muted={muted} onchange={handleMuteChange} />
 
-  {#if audioUnlocked && chordLabel}
+  {#if audioUnlocked}
     <div class="now-playing" aria-live="polite">
-      <span class="np-chord">{chordLabel}</span>
+      {#if chordLabel}<span class="np-chord">{chordLabel}</span>{/if}
+      <span class="timer">{fmtTime(sessionSec)}</span>
+      <button type="button" class="transport-btn" onclick={togglePause} aria-label={paused ? 'play' : 'pause'}>
+        {paused ? '▶' : '❚❚'}
+      </button>
+      <button type="button" class="transport-btn" onclick={restartSession} aria-label="restart">↻</button>
     </div>
   {/if}
 
@@ -456,6 +503,36 @@
   .np-chord {
     font-size: 11px;
     color: color-mix(in srgb, var(--iris) 60%, transparent);
+  }
+  .timer {
+    font-family: var(--font);
+    font-size: 12px;
+    color: color-mix(in srgb, #E8C9A0 75%, transparent);
+    padding: 4px 10px;
+    background: color-mix(in srgb, #14191C 70%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 70%, transparent);
+    border-radius: 9999px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .transport-btn {
+    pointer-events: auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, #14191C 70%, transparent);
+    border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
+    border-radius: 9999px;
+    color: color-mix(in srgb, #E8C9A0 75%, transparent);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .transport-btn:hover, .transport-btn:focus-visible {
+    color: var(--iris);
+    border-color: var(--iris);
   }
   .tagline {
     position: fixed;
