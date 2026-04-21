@@ -132,11 +132,23 @@ function scheduleChordDrift(mood) {
 
 function playOneChime(m) {
   const pent = pentFor(m);
-  const n = pent[Math.floor(Math.random() * pent.length)];
-  const octave = 12 + (Math.random() < 0.4 ? 12 : 0);
   const root = (_currentChord && _currentChord.root) || 0;
-  const pitch = m.tonic + root + n + octave;
-  triggerHarp(pitch, 0.5, 3.4);
+  // Pick a starting pentatonic step, then arpeggiate 3 ascending (or 4) steps for a harp figure.
+  const startIdx = Math.floor(Math.random() * (pent.length - 2));
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const len = 3 + Math.floor(Math.random() * 2);
+  const baseOctave = 12 + (Math.random() < 0.3 ? 12 : 0);
+  const velTop = 0.55;
+  for (let i = 0; i < len; i++) {
+    const idx = Math.max(0, Math.min(pent.length - 1, startIdx + i * dir));
+    const pitch = m.tonic + root + pent[idx] + baseOctave;
+    const delay = i * (180 + Math.random() * 120);
+    const vel = velTop * (1 - i * 0.12);
+    setTimeout(() => {
+      if (!_running) return;
+      triggerHarp(pitch, Math.max(0.1, vel), 3.0);
+    }, delay);
+  }
 }
 
 function scheduleChime() {
