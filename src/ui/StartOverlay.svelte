@@ -1,5 +1,4 @@
 <script>
-  // audio unlock overlay. one gesture required before Tone.start() can resume.
   let {
     onunlock = () => {},
     tuning = false,
@@ -31,14 +30,15 @@
 
 <svelte:window onkeydown={onKey} />
 
-<button
-  type="button"
+<div
+  role="button"
+  tabindex="0"
   class="overlay"
   class:reduced
   class:tuning
-  onpointerdown={unlock}
+  aria-disabled={tuning}
   aria-label={tuning ? 'Tuning instruments' : 'Tap to wake the garden'}
-  disabled={tuning}
+  onpointerdown={unlock}
 >
   <div class="inner">
     {#if tuning}
@@ -56,10 +56,10 @@
       {/if}
     {:else}
       <p class="title">Tap to wake the garden</p>
-      <p class="sub">your garden plays on its own. click a flower to hear it close. listen, prune, plant rarely.</p>
+      <p class="sub">ambient AI harp for focus. click to unlock audio.</p>
     {/if}
   </div>
-</button>
+</div>
 
 <style>
   .overlay {

@@ -1,7 +1,7 @@
 {
   "name": "sonogarden",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,15 +9,16 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "svelte": "5.55.4",
-    "vite": "8.0.8",
     "@sveltejs/vite-plugin-svelte": "7.0.0",
-    "@types/p5": "1.7.7"
+    "@types/p5": "1.7.7",
+    "svelte": "5.55.4",
+    "vite": "8.0.8"
   },
   "dependencies": {
     "@magenta/music": "1.23.1",
-    "tone": "15.1.22",
+    "idb": "8.0.3",
     "p5": "2.2.3",
-    "idb": "8.0.3"
+    "three": "^0.184.0",
+    "tone": "15.1.22"
   }
 }
