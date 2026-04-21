@@ -105,36 +105,16 @@
   async function handleUnlock() {
     if (audioUnlocked) return;
     audioUnlocked = true;
-    tuningInstruments = true;
-    bootPhase = 'audio';
-    try {
-      await initAudio();
-      setMood(activity);
-    } catch (err) {
-      logError('initAudio failed', err);
-    }
-    bootPhase = 'samples';
-    samplePercent = 0;
-    const sampleStart = performance.now();
-    const progTimer = setInterval(() => {
-      const elapsed = performance.now() - sampleStart;
-      samplePercent = Math.min(95, Math.round((elapsed / 12000) * 100));
-    }, 200);
-    // Do not block on voice loading. Pad and noise need no samples; harp will fill in when
-    // its mp3s finish downloading in the background. Otherwise mobile users with slow networks
-    // get stuck on "loading harp" forever.
-    waitForVoicesLoaded().catch((err) => logError('voices load', err));
-    // Give Tone.js a moment to spin up the master chain before autoplay starts.
-    await new Promise((r) => setTimeout(r, 120));
-    try {
-      if (false) await waitForVoicesLoaded();
-    } catch (err) {
-      logError('waitForVoicesLoaded failed', err);
-    } finally {
-      clearInterval(progTimer);
-      samplePercent = 100;
-    }
+    // Dismiss the overlay immediately. Audio + sample loading runs in the background so mobile
+    // never sees a "loading harp" hang. If anything fails the scene still shows and user can
+    // interact with 3D visuals.
     tuningInstruments = false;
+    samplePercent = 100;
+    initAudio()
+      .then(() => setMood(activity))
+      .catch((err) => logError('initAudio failed', err));
+    waitForVoicesLoaded().catch((err) => logError('voices load', err));
+    await new Promise((r) => setTimeout(r, 200));
     maybeStartAutoplay();
     startSessionTimer();
     if (listenTimer) clearInterval(listenTimer);
