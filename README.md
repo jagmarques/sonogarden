@@ -105,4 +105,4 @@ Auto-deploys to GitHub Pages on push to `main` via `.github/workflows/deploy.yml
 
 ## License
 
-MIT. See LICENSE.
+[MIT](LICENSE).
