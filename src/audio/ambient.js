@@ -37,6 +37,9 @@ let _chordTimer = null;
 let _chimeTimer = null;
 let _droneTimer = null;
 let _lastDroneVoice = null;
+// Bumped on every mood change. Every scheduled note captures the current gen at
+// schedule time and bails if gen has advanced. Kills tails from the previous mood.
+let _gen = 0;
 
 function triadFor(type) {
   return type === 'min' ? MINOR_TRIAD : MAJOR_TRIAD;
@@ -195,6 +198,7 @@ function playPhrase(m) {
   const octJump = pickOctaveOffset();
   const [tLo, tHi] = VOICE_TEMPO[voiceKey] || [320, 580];
   const beatMs = tLo + Math.random() * (tHi - tLo);
+  const myGen = _gen;
   let cursor = 0;
   const n = tmpl.length;
   for (let i = 0; i < n; i++) {
@@ -216,7 +220,7 @@ function playPhrase(m) {
     const holdSec = (noteMs / 1000) * 2.4 + 1.0;
     const when = jitter(cursor, 35);
     setTimeout(() => {
-      if (!_running) return;
+      if (!_running || _gen !== myGen) return;
       triggerVoice(voiceKey, pitch, Math.max(0.15, Math.min(0.75, vel)), holdSec);
     }, Math.max(0, when));
     cursor += noteMs;
@@ -228,7 +232,7 @@ function playPhrase(m) {
     const answerOct = octJump <= 0 ? 12 : 0;
     const pitch = m.tonic + chord.root + answerSemis + baseOctave + answerOct;
     setTimeout(() => {
-      if (!_running) return;
+      if (!_running || _gen !== myGen) return;
       triggerVoice(voiceKey, pitch, 0.16, beatMs / 1000 * 2.5);
     }, cursor + 280);
   }
@@ -298,10 +302,14 @@ export function stopAmbient() {
 
 export function onMoodChange() {
   if (!_running) return;
+  _gen += 1;
+  if (_chimeTimer) { clearTimeout(_chimeTimer); _chimeTimer = null; }
+  if (_droneTimer) { clearTimeout(_droneTimer); _droneTimer = null; }
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
-  setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 1200);
-  if (_droneTimer) { clearTimeout(_droneTimer); _droneTimer = null; }
+  const myGen = _gen;
+  setTimeout(() => { if (_running && _gen === myGen) playPhrase(getCurrentMood()); }, 1200);
+  scheduleChime();
   if (mood.droneVoice) scheduleDrone(mood);
 }

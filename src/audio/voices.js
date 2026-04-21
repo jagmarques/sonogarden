@@ -60,9 +60,10 @@ function make(name, urls, opts, dest) {
 }
 
 export function buildAllVoices(destinationNode) {
-  const harp = make('harp', HARP_URLS, { attack: 0.01, release: 2.6, gain: 0.55 }, destinationNode);
-  const piano = make('piano', PIANO_URLS, { attack: 0.005, release: 1.8, gain: 0.5 }, destinationNode);
-  const cello = make('cello', CELLO_URLS, { attack: 0.25, release: 3.0, gain: 0.42 }, destinationNode);
+  const harp = make('harp', HARP_URLS, { attack: 0.01, release: 4.5, gain: 0.55 }, destinationNode);
+  // Long release simulates a sustain pedal so notes ring into each other.
+  const piano = make('piano', PIANO_URLS, { attack: 0.005, release: 5.0, gain: 0.5 }, destinationNode);
+  const cello = make('cello', CELLO_URLS, { attack: 0.25, release: 4.0, gain: 0.42 }, destinationNode);
   const harmonium = make('harmonium', HARMONIUM_URLS, { attack: 0.25, release: 2.2, gain: 0.22 }, destinationNode);
   const contrabass = make('contrabass', CONTRABASS_URLS, { attack: 0.2, release: 2.4, gain: 0.4 }, destinationNode);
   const guitarNylon = make('guitar-nylon', GUITAR_NYLON_URLS, { attack: 0.005, release: 2.0, gain: 0.5 }, destinationNode);

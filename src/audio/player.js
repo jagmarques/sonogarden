@@ -314,8 +314,13 @@ export async function triggerVoice(voiceKey, pitch, velocity = 0.5, duration = 2
 }
 
 export function stopAll() {
-  if (_voices && _voices.piano && _voices.piano.synth && typeof _voices.piano.synth.releaseAll === 'function') {
-    try { _voices.piano.synth.releaseAll(); } catch (_) { /* ignore */ }
+  if (!_voices) return;
+  for (const key of Object.keys(_voices)) {
+    const v = _voices[key];
+    const s = v && v.synth;
+    if (s && typeof s.releaseAll === 'function') {
+      try { s.releaseAll(); } catch (_) { /* ignore */ }
+    }
   }
 }
 
