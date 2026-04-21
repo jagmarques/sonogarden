@@ -5,6 +5,7 @@
   import Bloomfield from './visual/Bloomfield.svelte';
   import MuteButton from './ui/MuteButton.svelte';
   import StartOverlay from './ui/StartOverlay.svelte';
+  import DiagnosticBadge from './ui/DiagnosticBadge.svelte';
 
   import { gardenState, setLiveMelody, loadSavedMoments, persistSavedMoments } from './state/store.svelte.js';
   import { initAudio, setMuted, waitForVoicesLoaded, setMood, stopAll } from './audio/player.js';
@@ -23,6 +24,9 @@
   let bootStuck = $state(false);
   let bootStuckTimer = null;
   let autoplayActive = false;
+
+  const showDiagnostics = typeof window !== 'undefined'
+    && new URL(window.location.href).searchParams.has('debug');
 
   let activity = $state(DEFAULT_MOOD);
   let shareFlash = $state(false);
@@ -353,6 +357,10 @@
   {/if}
 
   <MuteButton muted={muted} onchange={handleMuteChange} />
+
+  {#if showDiagnostics && audioUnlocked}
+    <DiagnosticBadge />
+  {/if}
 
   {#if audioUnlocked && chordLabel}
     <div class="now-playing" aria-live="polite">
