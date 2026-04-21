@@ -318,10 +318,9 @@
     <div class="save-flash" role="status" aria-live="polite">moment saved</div>
   {/if}
 
-  {#if audioUnlocked}
+  {#if audioUnlocked && chordLabel}
     <div class="now-playing" aria-live="polite">
-      <span class="np-mood">{MOODS[activity]?.label ?? ''}</span>
-      {#if chordLabel}<span class="np-chord">{chordLabel}</span>{/if}
+      <span class="np-chord">{chordLabel}</span>
     </div>
   {/if}
 
@@ -351,7 +350,7 @@
         <option value={key}>{MOODS[key].label}</option>
       {/each}
     </select>
-    <button type="button" class="spawn-toggle" class:glow={showSaveGlow} onclick={handleSaveMoment}>save this moment</button>
+    <button type="button" class="spawn-toggle" class:glow={showSaveGlow} onclick={handleSaveMoment} title="save this exact sound to replay later">bookmark</button>
     <button type="button" class="spawn-toggle" onclick={handleShare} title="copy a link to this exact moment">copy link</button>
     {#if shareFlash}
       <span class="share-flash" role="status" aria-live="polite">copied</span>
