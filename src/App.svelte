@@ -27,7 +27,6 @@
   let activity = $state(DEFAULT_MOOD);
   let shareFlash = $state(false);
   let shareFlashTimer = null;
-  let savedExpanded = $state(false);
   let pendingSharedMelody = null;
   let chordLabel = $state('');
   let listenSec = $state(0);
@@ -37,7 +36,6 @@
   let chordPollTimer = null;
 
   const muted = $derived(gardenState.muted);
-  const showSaveGlow = $derived(audioUnlocked && listenSec >= 20);
 
   function logError(context, err) {
     if (DEBUG) {
@@ -314,10 +312,6 @@
 
   <MuteButton muted={muted} onchange={handleMuteChange} />
 
-  {#if gardenState.saveFlash}
-    <div class="save-flash" role="status" aria-live="polite">moment saved</div>
-  {/if}
-
   {#if audioUnlocked && chordLabel}
     <div class="now-playing" aria-live="polite">
       <span class="np-chord">{chordLabel}</span>
@@ -350,29 +344,11 @@
         <option value={key}>{MOODS[key].label}</option>
       {/each}
     </select>
-    <button type="button" class="spawn-toggle" class:glow={showSaveGlow} onclick={handleSaveMoment} title="save this exact sound to replay later">bookmark</button>
     <button type="button" class="spawn-toggle" onclick={handleShare} title="copy a link to this exact moment">copy link</button>
     {#if shareFlash}
       <span class="share-flash" role="status" aria-live="polite">copied</span>
     {/if}
-    {#if gardenState.savedMoments.length > 0}
-      <button type="button" class="spawn-toggle" onclick={() => (savedExpanded = !savedExpanded)} aria-expanded={savedExpanded}>
-        saved ({gardenState.savedMoments.length})
-      </button>
-    {/if}
   </div>
-
-  {#if savedExpanded && gardenState.savedMoments.length > 0}
-    <div class="saved-strip" aria-label="saved moments">
-      {#each gardenState.savedMoments as m, i (m.ts)}
-        <div class="saved-card">
-          <button type="button" class="card-title" onclick={() => handleLoadMoment(i)} title="play this moment">{m.title}</button>
-          <span class="card-mood">{m.mood}</span>
-          <button type="button" class="card-del" aria-label="delete" onclick={() => handleDeleteMoment(i)}>×</button>
-        </div>
-      {/each}
-    </div>
-  {/if}
 {/if}
 
 <style>
