@@ -2,7 +2,6 @@
   import * as Tone from 'tone';
   import { onMount } from 'svelte';
 
-  import Garden from './visual/Garden.svelte';
   import Bloomfield from './visual/Bloomfield.svelte';
   import MuteButton from './ui/MuteButton.svelte';
   import StartOverlay from './ui/StartOverlay.svelte';
@@ -348,7 +347,6 @@
     {/if}
   </div>
 {:else}
-  <Garden />
   <Bloomfield mood={MOODS[activity]} />
 
   {#if !audioUnlocked || tuningInstruments}
