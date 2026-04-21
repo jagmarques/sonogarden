@@ -520,8 +520,8 @@
   }
   .transport-btn {
     pointer-events: auto;
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -529,8 +529,9 @@
     background: color-mix(in srgb, #14191C 75%, transparent);
     border: 1px solid color-mix(in srgb, #2A3A33 80%, transparent);
     border-radius: 9999px;
-    color: color-mix(in srgb, #E8C9A0 85%, transparent);
-    font-size: 16px;
+    color: color-mix(in srgb, #E8C9A0 90%, transparent);
+    font-size: 22px;
+    line-height: 1;
     cursor: pointer;
   }
   .transport-btn:hover, .transport-btn:focus-visible {
