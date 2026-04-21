@@ -26,8 +26,8 @@ export const MOODS = {
     delayFeedback: 0.15,
     delayWet: 0.1,
     padVolumeDb: -12,
-    chimeMs: [3500, 6500],
-    chordChangeMs: [18000, 30000],
+    chimeMs: [10000, 18000],
+    chordChangeMs: [24000, 38000],
     style: 0,
   },
   meditate: {
@@ -43,8 +43,8 @@ export const MOODS = {
     accent: { r: 155, g: 215, b: 140 },
     bgTop: '#3E4A3C',
     bgBot: '#2C352B',
-    chimeMs: [8000, 14000],
-    chordChangeMs: [32000, 50000],
+    chimeMs: [16000, 28000],
+    chordChangeMs: [38000, 58000],
     style: 1,
   },
   sleep: {
@@ -60,8 +60,8 @@ export const MOODS = {
     delayFeedback: 0.65,
     delayWet: 0.5,
     padVolumeDb: -5,
-    chimeMs: [14000, 26000],
-    chordChangeMs: [40000, 64000],
+    chimeMs: [26000, 48000],
+    chordChangeMs: [48000, 72000],
     style: 2,
   },
 };

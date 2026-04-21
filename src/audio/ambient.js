@@ -33,7 +33,6 @@ let _noise = null;
 let _noiseFilter = null;
 let _noiseGain = null;
 let _currentChord = null;
-let _padTimer = null;
 let _chordTimer = null;
 let _chimeTimer = null;
 
@@ -115,16 +114,6 @@ function emitPadChord(mood) {
   }
 }
 
-function schedulePadRefresh(mood) {
-  if (!_running) return;
-  emitPadChord(mood);
-  const nextMs = 9000 + Math.random() * 5000;
-  _padTimer = setTimeout(() => {
-    const m = getCurrentMood();
-    schedulePadRefresh(m);
-  }, nextMs);
-}
-
 function scheduleChordDrift(mood) {
   if (!_running) return;
   const [lo, hi] = mood.chordChangeMs || [22000, 38000];
@@ -137,62 +126,73 @@ function scheduleChordDrift(mood) {
   }, nextMs);
 }
 
-function playOneChime(m) {
+// Phrase templates expressed as offsets into the pentatonic scale. 0 = tonic. Each template
+// is a small, musical shape with a clear contour (arch, descent, call-and-answer, etc).
+// These sound intentional, unlike random pentatonic walks.
+const PHRASES = [
+  [4, 2, 0],
+  [0, 2, 4, 2],
+  [4, 3, 2, 0],
+  [0, 2, 4, 3, 2],
+  [2, 4, 2, 0],
+  [0, 2, 4],
+  [4, 2, 3, 0],
+  [3, 2, 4, 2, 0],
+];
+
+// Small timing perturbation so phrases don't feel metronomic. Keeps ambient, not robotic.
+function jitter(baseMs, amtMs = 40) {
+  return baseMs + (Math.random() - 0.5) * amtMs * 2;
+}
+
+// Play a musical phrase: pick a template, choose a tempo for this phrase, play with an
+// arch dynamic shape (soft-louder-soft). Silence between notes within the phrase is
+// deliberate and uniform, not random.
+function playPhrase(m) {
   const pent = pentFor(m);
   const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
-  const triad = triadFor(chord.type);
-  const baseOctave = 12 + (Math.random() < 0.3 ? 12 : 0);
-  const mode = Math.random();
-  if (mode < 0.45) {
-    // Simultaneous triad chord (root, third, fifth within 40 ms).
-    const roots = [triad[0], triad[1], triad[2]];
-    for (let i = 0; i < roots.length; i++) {
-      const pitch = m.tonic + chord.root + roots[i] + baseOctave;
-      const delay = i * 25;
-      const vel = 0.5 - i * 0.05;
-      setTimeout(() => {
-        if (!_running) return;
-        triggerHarp(pitch, vel, 3.4);
-      }, delay);
-    }
-  } else {
-    // Arpeggio: rolling 3-4 note pentatonic figure.
-    const startIdx = Math.floor(Math.random() * (pent.length - 2));
-    const dir = Math.random() < 0.5 ? 1 : -1;
-    const len = 3 + Math.floor(Math.random() * 2);
-    const velTop = 0.55;
-    for (let i = 0; i < len; i++) {
-      const idx = Math.max(0, Math.min(pent.length - 1, startIdx + i * dir));
-      const pitch = m.tonic + chord.root + pent[idx] + baseOctave;
-      const delay = i * (180 + Math.random() * 120);
-      const vel = velTop * (1 - i * 0.12);
-      setTimeout(() => {
-        if (!_running) return;
-        triggerHarp(pitch, Math.max(0.1, vel), 3.0);
-      }, delay);
-    }
+  const tmpl = PHRASES[Math.floor(Math.random() * PHRASES.length)];
+  const baseOctave = 12 + (Math.random() < 0.18 ? 12 : 0);
+  const stepMs = 320 + Math.random() * 260;
+  const n = tmpl.length;
+  for (let i = 0; i < n; i++) {
+    const idx = Math.max(0, Math.min(pent.length - 1, tmpl[i]));
+    const pitch = m.tonic + chord.root + pent[idx] + baseOctave;
+    const arch = Math.sin((i / Math.max(1, n - 1)) * Math.PI);
+    const vel = 0.16 + arch * 0.22;
+    const when = jitter(i * stepMs, 30);
+    setTimeout(() => {
+      if (!_running) return;
+      triggerHarp(pitch, Math.max(0.08, Math.min(0.5, vel)), 3.2);
+    }, Math.max(0, when));
   }
 }
 
-// High shimmer: a single very-high pentatonic note with extra reverb tail, fires rarely.
+// Very rare high single-note shimmer. Adds sparkle without clutter.
 function playShimmer(m) {
   const pent = pentFor(m);
   const root = (_currentChord && _currentChord.root) || 0;
   const n = pent[Math.floor(Math.random() * pent.length)];
   const pitch = m.tonic + root + n + 36;
-  triggerHarp(pitch, 0.35, 4.5);
+  triggerHarp(pitch, 0.22, 5.0);
 }
 
+// Schedule the next chime with a much longer base gap and a real "silent rest" probability.
+// Ambient music breathes: sometimes no phrase fires at all and the pad carries the minute.
 function scheduleChime() {
   if (!_running) return;
   const mood = getCurrentMood();
-  const [lo, hi] = mood.chimeMs || [3500, 6500];
-  const nextMs = lo + Math.random() * (hi - lo);
+  const [lo, hi] = mood.chimeMs || [12000, 22000];
+  const gap = lo + Math.random() * (hi - lo);
+  const nextMs = gap + (Math.random() < 0.28 ? gap * (0.8 + Math.random()) : 0);
   _chimeTimer = setTimeout(() => {
     if (!_running) return;
-    playOneChime(getCurrentMood());
-    if (Math.random() < 0.25) {
-      setTimeout(() => { if (_running) playShimmer(getCurrentMood()); }, 600 + Math.random() * 800);
+    const m = getCurrentMood();
+    if (Math.random() < 0.75) {
+      playPhrase(m);
+      if (Math.random() < 0.08) {
+        setTimeout(() => { if (_running) playShimmer(getCurrentMood()); }, 2200 + Math.random() * 1500);
+      }
     }
     scheduleChime();
   }, nextMs);
@@ -205,18 +205,14 @@ export function startAmbient() {
   ensureNoise();
   pickNextChord(mood);
   emitPadChord(mood);
-  // Opening 3-note harp phrase so the instrument is present from the first moment.
-  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 400);
-  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 1600);
-  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 2900);
-  schedulePadRefresh(mood);
+  // Gentle opening phrase after ~2s so the instrument announces itself once, then breathes.
+  setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 2000);
   scheduleChordDrift(mood);
   scheduleChime();
 }
 
 export function stopAmbient() {
   _running = false;
-  if (_padTimer) { clearTimeout(_padTimer); _padTimer = null; }
   if (_chordTimer) { clearTimeout(_chordTimer); _chordTimer = null; }
   if (_chimeTimer) { clearTimeout(_chimeTimer); _chimeTimer = null; }
   if (_padSynth) { try { _padSynth.releaseAll(); } catch (_) { /* ignore */ } }
@@ -227,6 +223,6 @@ export function onMoodChange() {
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
-  // Play a chime right away so the mood change is audible.
-  setTimeout(() => { if (_running) playOneChime(getCurrentMood()); }, 300);
+  // Short pause then a phrase, so the mood change is audible without feeling jumpy.
+  setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 1200);
 }
