@@ -68,7 +68,7 @@ function ensurePadSynth() {
   // Sine-based polyphonic pad with long attack/release for overlapping washes.
   _padSynth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
-    envelope: { attack: 6, decay: 0, sustain: 1, release: 10 },
+    envelope: { attack: 1.5, decay: 0, sustain: 1, release: 8 },
   }).connect(dest);
   _padSynth.volume.value = -26;
   return _padSynth;
