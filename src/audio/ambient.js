@@ -128,18 +128,23 @@ function scheduleChordDrift(mood) {
   }, nextMs);
 }
 
-// Phrase templates expressed as offsets into the pentatonic scale. 0 = tonic. Each template
-// is a small, musical shape with a clear contour (arch, descent, call-and-answer, etc).
-// These sound intentional, unlike random pentatonic walks.
+// Phrase templates as pentatonic-scale offsets. 0 = tonic. Each shape is a small lyrical
+// figure: ascent, descent, arch, return-to-tonic, sigh, call-and-answer. Longer phrases
+// (5-7 notes) read as melodies, not chimes. Repeats of the same scale degree create
+// suspensions and a vocal feel.
 const PHRASES = [
-  [4, 2, 0],
-  [0, 2, 4, 2],
+  [0, 2, 4, 2, 0],
   [4, 3, 2, 0],
-  [0, 2, 4, 3, 2],
-  [2, 4, 2, 0],
-  [0, 2, 4],
-  [4, 2, 3, 0],
-  [3, 2, 4, 2, 0],
+  [0, 2, 4, 3, 2, 0],
+  [4, 2, 4, 2, 0],
+  [2, 4, 3, 2, 0, 2],
+  [0, 4, 2, 4, 0],
+  [4, 2, 3, 4, 2, 0],
+  [3, 4, 2, 0, 2, 0],
+  [0, 2, 0, 4, 2, 0],
+  [4, 3, 2, 4, 2, 0, 2],
+  [2, 4, 2, 0, 4, 2, 0],
+  [0, 4, 3, 2, 0, 2, 4],
 ];
 
 // Small timing perturbation so phrases don't feel metronomic. Keeps ambient, not robotic.
@@ -175,7 +180,7 @@ function playPhrase(m) {
   const octaveJump = Math.random() < 0.15 ? 12 : 0;
   const [tLo, tHi] = VOICE_TEMPO[voiceKey] || [320, 580];
   const stepMs = tLo + Math.random() * (tHi - tLo);
-  const holdSec = (stepMs / 1000) * 2.2 + 1.0;
+  const holdSec = (stepMs / 1000) * 2.6 + 1.4;
   const n = tmpl.length;
   for (let i = 0; i < n; i++) {
     const idx = Math.max(0, Math.min(pent.length - 1, tmpl[i]));
@@ -187,6 +192,17 @@ function playPhrase(m) {
       if (!_running) return;
       triggerVoice(voiceKey, pitch, Math.max(0.15, Math.min(0.75, vel)), holdSec);
     }, Math.max(0, when));
+  }
+  // 30 percent chance of a soft answering note an octave up after the phrase ends, gives
+  // a call-and-response shape that reads as more lyrical.
+  if (Math.random() < 0.3) {
+    const lastIdx = tmpl[n - 1];
+    const answerPitch = m.tonic + chord.root + pent[lastIdx] + baseOctave + 12;
+    const answerWhen = n * stepMs + 350;
+    setTimeout(() => {
+      if (!_running) return;
+      triggerVoice(voiceKey, answerPitch, 0.18, holdSec * 0.7);
+    }, answerWhen);
   }
 }
 
