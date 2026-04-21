@@ -36,6 +36,7 @@ let _currentChord = null;
 let _chordTimer = null;
 let _chimeTimer = null;
 let _droneTimer = null;
+let _pedalTimer = null;
 let _lastDroneVoice = null;
 // Bumped on every mood change. Every scheduled note captures the current gen at
 // schedule time and bails if gen has advanced. Kills tails from the previous mood.
@@ -100,12 +101,22 @@ function ensureNoise() {
 
 function pickNextChord(mood) {
   const pool = chordsFor(mood);
-  // Avoid repeating the same chord twice in a row.
   let next = pool[Math.floor(Math.random() * pool.length)];
   if (_currentChord && next.root === _currentChord.root && pool.length > 1) {
     next = pool[(pool.indexOf(next) + 1) % pool.length];
   }
   _currentChord = next;
+  return next;
+}
+
+// Picks a candidate chord without committing it to _currentChord. Lets the scheduler
+// preview an upcoming chord (anticipation) before the actual change.
+function peekNextChord(mood) {
+  const pool = chordsFor(mood);
+  let next = pool[Math.floor(Math.random() * pool.length)];
+  if (_currentChord && next.root === _currentChord.root && pool.length > 1) {
+    next = pool[(pool.indexOf(next) + 1) % pool.length];
+  }
   return next;
 }
 
@@ -123,32 +134,61 @@ function emitPadChord(mood) {
   }
 }
 
-// Plays a real chord on the mood's phrase voice: root + 3rd + 5th + 7th, soft, slightly
-// staggered so each note has its own attack. This is the harmonic anchor on chord changes.
-function playPhraseChord(m, voicing = 'rich') {
+// Plays a real chord on the mood's phrase voice. opts.chord (override the current chord),
+// opts.intensity (0.6 = anticipation soft, 1.0 = main hit, 0.4 = pedal echo).
+function playPhraseChord(m, opts = {}) {
   const voiceKey = m.phraseVoice || 'harp';
-  const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
+  const chord = opts.chord || _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
   const triad = chord.type === 'min' ? [0, 3, 7] : [0, 4, 7];
-  const intervals = voicing === 'rich' ? [...triad, 11] : triad;
+  const intervals = [...triad, 11];
   const baseOctave = (VOICE_OCTAVE[voiceKey] ?? 12);
   const root = m.tonic + chord.root + baseOctave;
+  const intensity = opts.intensity ?? 1.0;
   const myGen = _gen;
   for (let i = 0; i < intervals.length; i++) {
     const pitch = root + intervals[i];
     const stagger = i * 35;
-    const vel = 0.22 - i * 0.02;
+    const vel = (0.22 - i * 0.02) * intensity;
     setTimeout(() => {
       if (!_running || _gen !== myGen) return;
-      triggerVoice(voiceKey, pitch, Math.max(0.1, vel), 4.5);
+      triggerVoice(voiceKey, pitch, Math.max(0.06, vel), 4.5);
     }, stagger);
   }
+}
+
+// Sustained low-octave tonic that holds across chord changes. Eno-style pedal point
+// glues the harmonic motion. Re-triggered on a long interval so the bed never decays
+// to silence. SOURCE: Pedal point, en.wikipedia.org/wiki/Pedal_point.
+function schedulePedal(m) {
+  if (!_running) return;
+  const voiceKey = m.phraseVoice || 'harp';
+  const baseOctave = (VOICE_OCTAVE[voiceKey] ?? 12);
+  const pitch = m.tonic + baseOctave - 24;
+  const myGen = _gen;
+  const fire = () => {
+    if (!_running || _gen !== myGen) return;
+    triggerVoice(voiceKey, pitch, 0.08, 14.0);
+    _pedalTimer = setTimeout(fire, 11000 + Math.random() * 3000);
+  };
+  fire();
 }
 
 function scheduleChordDrift(mood) {
   if (!_running) return;
   const [lo, hi] = mood.chordChangeMs || [22000, 38000];
   const nextMs = lo + Math.random() * (hi - lo);
+  const anticipateMs = Math.max(1200, nextMs - 1700);
+  const myGen = _gen;
+  // Anticipation: 1.7s before the actual chord change, play the upcoming chord softly so
+  // the ear is led into the change instead of jumping. Voice-leading prep.
+  setTimeout(() => {
+    if (!_running || _gen !== myGen) return;
+    const m = getCurrentMood();
+    const next = peekNextChord(m);
+    playPhraseChord(m, { chord: next, intensity: 0.45 });
+  }, anticipateMs);
   _chordTimer = setTimeout(() => {
+    if (!_running || _gen !== myGen) return;
     const m = getCurrentMood();
     pickNextChord(m);
     emitPadChord(m);
@@ -309,6 +349,7 @@ export function startAmbient() {
   pickNextChord(mood);
   emitPadChord(mood);
   playPhraseChord(mood);
+  schedulePedal(mood);
   setTimeout(() => { if (_running) playPhrase(getCurrentMood()); }, 2000);
   scheduleChordDrift(mood);
   scheduleChime();
@@ -320,6 +361,7 @@ export function stopAmbient() {
   if (_chordTimer) { clearTimeout(_chordTimer); _chordTimer = null; }
   if (_chimeTimer) { clearTimeout(_chimeTimer); _chimeTimer = null; }
   if (_droneTimer) { clearTimeout(_droneTimer); _droneTimer = null; }
+  if (_pedalTimer) { clearTimeout(_pedalTimer); _pedalTimer = null; }
   if (_padSynth) { try { _padSynth.releaseAll(); } catch (_) { /* ignore */ } }
 }
 
@@ -328,12 +370,16 @@ export function onMoodChange() {
   _gen += 1;
   if (_chimeTimer) { clearTimeout(_chimeTimer); _chimeTimer = null; }
   if (_droneTimer) { clearTimeout(_droneTimer); _droneTimer = null; }
+  if (_chordTimer) { clearTimeout(_chordTimer); _chordTimer = null; }
+  if (_pedalTimer) { clearTimeout(_pedalTimer); _pedalTimer = null; }
   const mood = getCurrentMood();
   pickNextChord(mood);
   emitPadChord(mood);
   playPhraseChord(mood);
+  schedulePedal(mood);
   const myGen = _gen;
   setTimeout(() => { if (_running && _gen === myGen) playPhrase(getCurrentMood()); }, 1500);
+  scheduleChordDrift(mood);
   scheduleChime();
   if (mood.droneVoice) scheduleDrone(mood);
 }
