@@ -7,7 +7,7 @@ import { emitNote } from './events.js';
 import { setPadVolume } from './ambient.js';
 
 const DEBUG = false;
-const MASTER_LIMITER_THRESHOLD_DB = -3;
+const MASTER_LIMITER_THRESHOLD_DB = -1;
 const MASTER_GAIN_DB = 0;
 const MELODY_GAIN_DB = 0;
 
@@ -48,12 +48,14 @@ function ensureMasterChain() {
   // Tape-style feedback echo. Wet is modulated per mood in setMood.
   _delay = new Tone.FeedbackDelay({ delayTime: 0.4, feedback: 0.35 });
   _delay.wet.value = 0.2;
+  // Gentle bus compression. Aggressive ratios duck overlapping note tails and make a
+  // polyphonic flow sound monophonic. Limiter at the end of the chain catches peaks.
   _compressor = new Tone.Compressor({
-    threshold: -18,
-    ratio: 3,
-    attack: 0.01,
-    release: 0.2,
-    knee: 8,
+    threshold: -8,
+    ratio: 1.6,
+    attack: 0.05,
+    release: 0.6,
+    knee: 12,
   });
   _hpf = new Tone.Filter({ frequency: 60, type: 'highpass', rolloff: -12 });
   _masterGain = new Tone.Gain(dbToLin(MASTER_GAIN_DB));
