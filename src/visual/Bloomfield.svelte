@@ -31,6 +31,9 @@
   let connPosAttr = null;
   const MAX_CONNECTIONS = 200;
   const CONNECTION_DIST = 4.5;
+  // Click cumulatively grows the centerpiece and adds a momentary pulse; resets on pause/restart.
+  let clickGrowth = 0;
+  let clickPulseEnds = 0;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -349,6 +352,9 @@
       const pitch = 60 + Math.round(ny * 14);
       spawnOrb(pitch, 1.0, { x, y, z: -3 });
       spawnOrb(pitch + 7, 0.7, { x: x + 0.6, y: y + 0.4, z: -3 });
+      // Grow + pulse the focal geometry so users see their click affect the scene.
+      clickGrowth = Math.min(0.8, clickGrowth + 0.08);
+      clickPulseEnds = performance.now() / 1000 + 0.6;
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerleave', onPointerLeave);
@@ -376,16 +382,21 @@
         if (centerInner) centerInner.material.color.copy(bgMat.uniforms.uAccent.value);
       }
       pointsMat.uniforms.uTime.value = t;
-      // Scene itself stays fixed; only the focal icosahedra rotate, and only the camera drifts
-      // subtly. No whole-scene rotation (reverted after user feedback that it felt unstable).
+      const nowSec = performance.now() / 1000;
+      const pulse = Math.max(0, clickPulseEnds - nowSec);
+      const pulseScale = 1 + pulse * 0.4;
+      const growScale = 1 + clickGrowth;
       if (centerpiece) {
         centerpiece.rotation.x = t * 0.05;
         centerpiece.rotation.y = t * 0.04;
+        centerpiece.scale.setScalar(growScale * pulseScale);
       }
       if (centerInner) {
         centerInner.rotation.x = -t * 0.07;
         centerInner.rotation.z = t * 0.05;
+        centerInner.scale.setScalar(growScale * (1 + pulse * 0.6));
       }
+      clickGrowth *= 0.998;
       camera.position.x = Math.sin(t * 0.04) * 0.8 + mouseSmoothed.x * 1.5;
       camera.position.y = Math.sin(t * 0.035 + 1.2) * 0.4 + mouseSmoothed.y * 0.9;
       camera.position.z = 14;
@@ -461,6 +472,12 @@
   $effect(() => {
     moodRef = mood;
   });
+
+  // Called from parent when the user presses reset so geometry snaps back to neutral.
+  export function resetVisuals() {
+    clickGrowth = 0;
+    clickPulseEnds = 0;
+  }
 </script>
 
 <div bind:this={hostEl} class="bloomfield" aria-hidden="true"></div>

@@ -22,21 +22,27 @@ export const MOODS = {
     accent: { r: 130, g: 180, b: 230 },
     bgTop: '#3D4A58',
     bgBot: '#2A333E',
+    delayTime: 0.28,
+    delayFeedback: 0.2,
+    delayWet: 0.15,
     chimeMs: [2200, 4200],
     chordChangeMs: [22000, 38000],
     style: 0,
   },
-  relax: {
-    label: 'relax',
-    tonic: 62,
-    scale: 'major',
-    reverbDecay: 7.0,
-    reverbWet: 0.55,
+  meditate: {
+    label: 'meditate',
+    tonic: 57,
+    scale: 'minor',
+    reverbDecay: 9.0,
+    reverbWet: 0.65,
+    delayTime: 0.48,
+    delayFeedback: 0.55,
+    delayWet: 0.35,
     accent: { r: 155, g: 215, b: 140 },
     bgTop: '#3E4A3C',
     bgBot: '#2C352B',
-    chimeMs: [2500, 5000],
-    chordChangeMs: [26000, 42000],
+    chimeMs: [3000, 6000],
+    chordChangeMs: [30000, 48000],
     style: 1,
   },
   sleep: {
@@ -48,22 +54,12 @@ export const MOODS = {
     accent: { r: 175, g: 155, b: 225 },
     bgTop: '#36333E',
     bgBot: '#24222C',
+    delayTime: 0.72,
+    delayFeedback: 0.5,
+    delayWet: 0.3,
     chimeMs: [3500, 6500],
     chordChangeMs: [32000, 50000],
     style: 2,
-  },
-  activity: {
-    label: 'activity',
-    tonic: 62,
-    scale: 'major',
-    reverbDecay: 3.0,
-    reverbWet: 0.25,
-    accent: { r: 240, g: 180, b: 120 },
-    bgTop: '#4A3F33',
-    bgBot: '#342C24',
-    chimeMs: [1500, 3500],
-    chordChangeMs: [18000, 30000],
-    style: 3,
   },
 };
 
@@ -84,10 +80,8 @@ export function listMoodKeys() {
 }
 
 export function moodByHour(hour) {
-  if (hour >= 22 || hour < 5) return 'sleep';
-  if (hour >= 5 && hour < 8) return 'relax';
-  if (hour >= 8 && hour < 12) return 'focus';
-  if (hour >= 12 && hour < 18) return 'focus';
-  if (hour >= 18 && hour < 22) return 'relax';
-  return 'relax';
+  if (hour >= 22 || hour < 6) return 'sleep';
+  if (hour >= 6 && hour < 9) return 'meditate';
+  if (hour >= 9 && hour < 18) return 'focus';
+  return 'meditate';
 }
