@@ -193,10 +193,11 @@
     uniform float uMorph;
     uniform float uClick;
     void main() {
-      // Each edge breaks on its own schedule. aPhase in [0,1] spreads the break window so
-      // pieces scatter progressively rather than all at once.
-      float start = aPhase * 0.55;
-      float local = clamp((uMorph - start) / 0.45, 0.0, 1.0);
+      // Each edge breaks and reforms inside a narrow window while all others stay at rest.
+      // aPhase in [0,1] scatters the break events across the full morph so edges go one by
+      // one, not simultaneously.
+      float start = aPhase * 0.82;
+      float local = clamp((uMorph - start) / 0.18, 0.0, 1.0);
       float explode = sin(local * 3.14159265);
       vec3 disp = aRand * (explode * 2.6 + uClick * 0.6);
       vec3 p = position + disp;
@@ -280,7 +281,8 @@
       if (centerInner) centerInner.material.uniforms.uMorph.value = 0;
       return;
     }
-    morphPhase = Math.min(1, morphPhase + dt * 0.3);
+    // Slow morph: roughly 9-10 seconds total so edges break one-by-one rather than all at once.
+    morphPhase = Math.min(1, morphPhase + dt * 0.11);
     if (centerpiece) centerpiece.material.uniforms.uMorph.value = morphPhase;
     if (centerInner) centerInner.material.uniforms.uMorph.value = morphPhase;
     if (morphPhase >= 0.5 && morphPending) {
