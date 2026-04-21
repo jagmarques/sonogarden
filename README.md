@@ -56,18 +56,6 @@ Interactions:
 - **Bottom right**: session timer, play/pause, restart, mute.
 - **First open**: 3-slide intro overlay, dismissed forever after.
 
-## Differentiators
-
-Closest shipped neighbours: [ambient.garden](https://ambient.garden/) (3D landscape, algorithmic audio) and [generative.fm](https://play.generative.fm) (browser generative music, pay-what-you-want, no visuals).
-
-Sonogarden's wedge:
-
-- Mood-categorical UX (one-tap focus / meditate / sleep) instead of spatial exploration.
-- Per-mood instrument selection (piano, cello, harmonium, harp) so each mood actually sounds different, not the same voice tinted by reverb.
-- Session timer + pause / restart for meditation sessions.
-- Mobile-first bundle (845 KB gzipped, no p5, no magenta).
-- Abstract geometric forms with break and reform, not a walkable landscape.
-
 ## License
 
 [MIT](LICENSE)
