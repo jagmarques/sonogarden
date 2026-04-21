@@ -25,6 +25,8 @@
   let moodRef = mood;
   let clock;
   let unsubscribeNote = null;
+  let centerpiece = null;
+  let centerInner = null;
   const mouse = { x: 0, y: 0, active: false };
   let mouseSmoothed = { x: 0, y: 0 };
   const ambient = [];
@@ -291,6 +293,25 @@
     buildPoints();
     seedAmbient();
 
+    // Atmospheric fog so distant orbs fade gently. Gives a sense of depth.
+    scene.fog = new THREE.FogExp2(0x000000, 0.04);
+
+    // Central slowly-rotating wireframe icosahedron. Low-contrast, just enough to give
+    // the scene a focal structure without being a gimmick.
+    const icoGeom = new THREE.IcosahedronGeometry(3.2, 1);
+    const icoEdges = new THREE.EdgesGeometry(icoGeom);
+    const icoMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.18 });
+    icoMat.color = accentVec3(moodRef);
+    centerpiece = new THREE.LineSegments(icoEdges, icoMat);
+    scene.add(centerpiece);
+
+    const inGeom = new THREE.IcosahedronGeometry(1.6, 0);
+    const inEdges = new THREE.EdgesGeometry(inGeom);
+    const inMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.32 });
+    inMat.color = accentVec3(moodRef);
+    centerInner = new THREE.LineSegments(inEdges, inMat);
+    scene.add(centerInner);
+
     unsubscribeNote = onNote((e) => {
       if (disposed) return;
       spawnOrb(e.pitch, e.velocity);
@@ -335,8 +356,20 @@
         bgMat.uniforms.uAccent.value.lerp(accentVec3(moodRef), 0.02);
         bgMat.uniforms.uDeep.value.lerp(deepVec3(moodRef), 0.02);
         pointsMat.uniforms.uAccent.value.copy(bgMat.uniforms.uAccent.value);
+        if (centerpiece) centerpiece.material.color.copy(bgMat.uniforms.uAccent.value);
+        if (centerInner) centerInner.material.color.copy(bgMat.uniforms.uAccent.value);
       }
       pointsMat.uniforms.uTime.value = t;
+      // Global slow rotation keeps the composition from looking frozen, but stays gentle.
+      scene.rotation.y = Math.sin(t * 0.04) * 0.25;
+      if (centerpiece) {
+        centerpiece.rotation.x = t * 0.09;
+        centerpiece.rotation.y = t * 0.07;
+      }
+      if (centerInner) {
+        centerInner.rotation.x = -t * 0.13;
+        centerInner.rotation.z = t * 0.1;
+      }
       camera.position.x = Math.sin(t * 0.06) * 1.8 + mouseSmoothed.x * 2.0;
       camera.position.y = Math.sin(t * 0.05 + 1.2) * 0.9 + mouseSmoothed.y * 1.2;
       camera.position.z = 14 + Math.sin(t * 0.03) * 1.0;
@@ -367,6 +400,8 @@
         points.geometry.dispose();
         pointsMat.dispose();
       }
+      if (centerpiece) { centerpiece.geometry.dispose(); centerpiece.material.dispose(); }
+      if (centerInner) { centerInner.geometry.dispose(); centerInner.material.dispose(); }
     };
   });
 
