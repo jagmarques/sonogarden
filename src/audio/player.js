@@ -151,6 +151,31 @@ function setIOSAudioSessionPlayback() {
   } catch (_) { /* ignore */ }
 }
 
+// Builds a real 0.5s silent 8kHz mono 8-bit PCM WAV blob. Must contain actual samples;
+// a 0-byte data chunk is refused by iOS Safari. 8-bit PCM is unsigned with 128 = silence.
+function buildSilentWavBlob() {
+  const rate = 8000;
+  const samples = rate / 2;
+  const total = 44 + samples;
+  const buf = new ArrayBuffer(total);
+  const v = new DataView(buf);
+  v.setUint32(0, 0x52494646, false);
+  v.setUint32(4, total - 8, true);
+  v.setUint32(8, 0x57415645, false);
+  v.setUint32(12, 0x666d7420, false);
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true);
+  v.setUint32(28, rate, true);
+  v.setUint16(32, 1, true);
+  v.setUint16(34, 8, true);
+  v.setUint32(36, 0x64617461, false);
+  v.setUint32(40, samples, true);
+  for (let i = 0; i < samples; i++) v.setUint8(44 + i, 128);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
 // Silent-audio-element fallback for iOS < 17.5 where navigator.audioSession is absent.
 // Keeps the "media" route open by continuously playing a hidden silent WAV loop.
 // SOURCE: github.com/swevans/unmute, github.com/feross/unmute-ios-audio, Tone.js issue #909.
@@ -160,8 +185,8 @@ function startSilentAudioKeepalive() {
     if (_silentAudioEl) return;
     if (typeof document === 'undefined') return;
     if (typeof navigator !== 'undefined' && 'audioSession' in navigator) return;
-    // 0.05s 8kHz mono PCM WAV of pure silence, base64-inlined. Loops forever.
-    const silentWav = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA==';
+    const blob = buildSilentWavBlob();
+    const url = URL.createObjectURL(blob);
     const el = document.createElement('audio');
     el.setAttribute('playsinline', '');
     el.setAttribute('webkit-playsinline', '');
@@ -170,7 +195,7 @@ function startSilentAudioKeepalive() {
     el.preload = 'auto';
     el.muted = false;
     el.volume = 1;
-    el.src = silentWav;
+    el.src = url;
     el.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
     document.body.appendChild(el);
     const p = el.play();
@@ -181,9 +206,17 @@ function startSilentAudioKeepalive() {
 
 async function realStart() {
   if (_started && contextRunning()) return;
-  unlockIOSAudio();
+  // All of these are synchronous and MUST run before the first await so iOS Safari
+  // processes them inside the user-gesture frame.
   setIOSAudioSessionPlayback();
   startSilentAudioKeepalive();
+  unlockIOSAudio();
+  try {
+    const raw = Tone.getContext().rawContext;
+    if (raw && raw.state !== 'running' && typeof raw.resume === 'function') {
+      raw.resume();
+    }
+  } catch (_) { /* ignore */ }
   await Tone.start();
   unlockIOSAudio();
   setIOSAudioSessionPlayback();

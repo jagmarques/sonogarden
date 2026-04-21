@@ -107,18 +107,21 @@
   }
 
   let _unlockAttempted = false;
-  async function handleUnlock() {
+  function handleUnlock() {
     if (_unlockAttempted) return;
     _unlockAttempted = true;
-    // Start Tone.start() synchronously inside the gesture chain (required by iOS Safari)
-    // but do NOT block overlay dismissal on it. If the mobile browser hangs resolving the
-    // start promise, the app still boots and the user sees the scene.
+    // iOS Safari will only resume an AudioContext when .resume() is called SYNCHRONOUSLY
+    // inside the user-gesture frame. No awaits, no promise chains before this call.
+    try {
+      const raw = Tone.getContext().rawContext;
+      if (raw && raw.state !== 'running' && typeof raw.resume === 'function') {
+        raw.resume();
+      }
+    } catch (_) { /* ignore */ }
     audioUnlocked = true;
     tuningInstruments = false;
     samplePercent = 100;
-    // Start autoplay only after Tone.start() has actually resolved so the AudioContext is
-    // confirmed running. On iOS a fire-and-forget start can schedule notes on a still-suspended
-    // context and produce silence even after the context later resumes.
+    // Now run the full Tone init chain async. The context is already resuming from above.
     initAudio()
       .then(() => {
         setMood(activity);
@@ -383,8 +386,6 @@
     </div>
   {/if}
 
-  <div class="tagline">free forever / no signup / browser-only</div>
-
   {#if showIntro && audioUnlocked}
     <button type="button" class="intro-overlay" onclick={advanceIntro}>
       <div class="intro-inner">
@@ -552,18 +553,6 @@
   .transport-btn:hover, .transport-btn:focus-visible {
     color: var(--iris);
     border-color: var(--iris);
-  }
-  .tagline {
-    position: fixed;
-    left: 16px;
-    bottom: 16px;
-    z-index: 45;
-    font-family: var(--font);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: color-mix(in srgb, var(--iris) 45%, transparent);
-    pointer-events: none;
-    text-transform: lowercase;
   }
   .intro-overlay {
     position: fixed;
