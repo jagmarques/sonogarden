@@ -3,11 +3,11 @@
 import * as mm from '@magenta/music/es6';
 
 // SOURCE: https://github.com/magenta/magenta-js/blob/master/music/checkpoints/README.md
-// mel_4bar_med_lokl_q2 is described as "better for sampling" (low-KL prior) and is 65.4 MB.
+// mel_2bar_small: 2-bar melody model. Shorter phrases + higher entropy per draw -> more variety.
 const CHECKPOINT_URL =
-  'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/mel_4bar_med_lokl_q2';
+  'https://storage.googleapis.com/magentadata/js/checkpoints/music_vae/mel_2bar_small';
 
-const DEFAULT_TEMPERATURE = 1.1;
+const DEFAULT_TEMPERATURE = 1.2;
 const DEFAULT_STEPS_PER_QUARTER = 4;
 
 let _model = null;
