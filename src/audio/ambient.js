@@ -132,22 +132,38 @@ function scheduleChordDrift(mood) {
 
 function playOneChime(m) {
   const pent = pentFor(m);
-  const root = (_currentChord && _currentChord.root) || 0;
-  // Pick a starting pentatonic step, then arpeggiate 3 ascending (or 4) steps for a harp figure.
-  const startIdx = Math.floor(Math.random() * (pent.length - 2));
-  const dir = Math.random() < 0.5 ? 1 : -1;
-  const len = 3 + Math.floor(Math.random() * 2);
+  const chord = _currentChord || { root: 0, type: m.scale === 'minor' ? 'min' : 'maj' };
+  const triad = triadFor(chord.type);
   const baseOctave = 12 + (Math.random() < 0.3 ? 12 : 0);
-  const velTop = 0.55;
-  for (let i = 0; i < len; i++) {
-    const idx = Math.max(0, Math.min(pent.length - 1, startIdx + i * dir));
-    const pitch = m.tonic + root + pent[idx] + baseOctave;
-    const delay = i * (180 + Math.random() * 120);
-    const vel = velTop * (1 - i * 0.12);
-    setTimeout(() => {
-      if (!_running) return;
-      triggerHarp(pitch, Math.max(0.1, vel), 3.0);
-    }, delay);
+  const mode = Math.random();
+  if (mode < 0.45) {
+    // Simultaneous triad chord (root, third, fifth within 40 ms).
+    const roots = [triad[0], triad[1], triad[2]];
+    for (let i = 0; i < roots.length; i++) {
+      const pitch = m.tonic + chord.root + roots[i] + baseOctave;
+      const delay = i * 25;
+      const vel = 0.5 - i * 0.05;
+      setTimeout(() => {
+        if (!_running) return;
+        triggerHarp(pitch, vel, 3.4);
+      }, delay);
+    }
+  } else {
+    // Arpeggio: rolling 3-4 note pentatonic figure.
+    const startIdx = Math.floor(Math.random() * (pent.length - 2));
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const len = 3 + Math.floor(Math.random() * 2);
+    const velTop = 0.55;
+    for (let i = 0; i < len; i++) {
+      const idx = Math.max(0, Math.min(pent.length - 1, startIdx + i * dir));
+      const pitch = m.tonic + chord.root + pent[idx] + baseOctave;
+      const delay = i * (180 + Math.random() * 120);
+      const vel = velTop * (1 - i * 0.12);
+      setTimeout(() => {
+        if (!_running) return;
+        triggerHarp(pitch, Math.max(0.1, vel), 3.0);
+      }, delay);
+    }
   }
 }
 
