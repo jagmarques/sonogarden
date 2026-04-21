@@ -54,7 +54,6 @@ Interactions:
 - **Top left**: now-playing chord (e.g. "C major").
 - **Top right**: the three mood pill buttons.
 - **Bottom right**: session timer, play/pause, restart, mute.
-- **Bottom left**: `copy link` button. Generates a `?s=base64(mood, melody)` URL you can share.
 - **First open**: 3-slide intro overlay, dismissed forever after.
 
 ## Differentiators
@@ -64,44 +63,10 @@ Closest shipped neighbours: [ambient.garden](https://ambient.garden/) (3D landsc
 Sonogarden's wedge:
 
 - Mood-categorical UX (one-tap focus / meditate / sleep) instead of spatial exploration.
-- Per-mood instrument selection (piano, cello, harmonium, harp) so each mood actually sounds different, not the same harp tinted by reverb.
-- Share-a-moment URL that replays the exact chord state.
+- Per-mood instrument selection (piano, cello, harmonium, harp) so each mood actually sounds different, not the same voice tinted by reverb.
 - Session timer + pause / restart for meditation sessions.
 - Mobile-first bundle (845 KB gzipped, no p5, no magenta).
-- Documented iOS hardware-silent-switch handling.
 - Abstract geometric forms with break and reform, not a walkable landscape.
-
-## Architecture
-
-```
-src/
-  App.svelte              boot, mood pills, timer, copy-link UI, debug badge gate
-  audio/
-    ambient.js            phrase scheduler + sine pad + pink-noise bed + drone loop
-    autoplay.js           start/stop/moodChange facade for App.svelte
-    events.js             pub-sub for note events consumed by Bloomfield
-    moods.js              3 mood presets (tonic, scale, reverb, delay, instrument set, palette)
-    player.js             master Tone chain, triggerVoice, iOS audioSession + silent-WAV unlock
-    voices.js             7 Tone.Sampler voices loaded from nbrosowsky CDN
-  state/store.svelte.js   Svelte rune store: liveMelody, muted, savedMoments
-  ui/
-    DiagnosticBadge.svelte  500ms-ticking badge gated by ?debug=1
-    MuteButton.svelte
-    StartOverlay.svelte     gesture-unlock with onclick-only handler
-  visual/Bloomfield.svelte  three.js scene
-  main.js
-index.html                inline boot-error overlay + iOS audioSession routing
-```
-
-## Build
-
-```bash
-npm install
-npm run dev     # local dev server
-npm run build   # production build into dist/
-```
-
-Auto-deploys to GitHub Pages on push to `main` via `.github/workflows/deploy.yml`.
 
 ## License
 
