@@ -21,38 +21,45 @@ const VOICINGS = {
 // Focus leans Satie Gymnopedies (open 7ths, major, 3/4). Meditate leans Debussy (min9, sus, 4/4).
 // Sleep leans Gnossiennes (modal minor, long bars). Kept short so the ear learns them.
 const PROGRESSIONS = {
+  // Gymnopedie No. 1 (Satie): D major, 3/4, 72 BPM, alternates IV maj7 and I maj7.
+  // SOURCES: en.wikipedia.org/wiki/Gymnopedies, songbpm.com/@erik-satie/gymnopedie-no-1.
   focus: {
-    bpm: 66,
+    bpm: 70,
     beatsPerBar: 3,
     barsPerChord: 2,
     chords: [
-      { root: 0,  type: 'maj7' },
-      { root: 7,  type: 'maj7' },
-      { root: 2,  type: 'min7' },
-      { root: 5,  type: 'maj7' },
+      { root: 5, type: 'maj7' },
+      { root: 0, type: 'maj7' },
     ],
     melodyEveryBars: 2,
   },
+  // Clair de Lune (Debussy): Db major, 9/8 andante tres expressif, 62-73 BPM. We stay in 4/4
+  // for engine simplicity but use major-mode 7/9 sonorities for the impressionist colour.
+  // SOURCES: en.wikipedia.org/wiki/Suite_bergamasque, thomasstone1.wordpress.com.
   meditate: {
-    bpm: 52,
+    bpm: 60,
     beatsPerBar: 4,
     barsPerChord: 2,
     chords: [
-      { root: 0,  type: 'min9' },
-      { root: -5, type: 'maj9' },
-      { root: -2, type: 'sus2' },
-      { root: 0,  type: 'min7' },
+      { root: 0,  type: 'maj9' },
+      { root: -2, type: 'maj7' },
+      { root: -4, type: 'maj9' },
+      { root: -5, type: 'maj7' },
     ],
     melodyEveryBars: 4,
   },
+  // Gnossienne No. 1 (Satie): F minor free-time "Lent" (typically transcribed 4/4 at ~70 BPM).
+  // We drop BPM to 54 for sleep use-case. Alternates i min7 and V min7 with bIII colour.
+  // SOURCES: en.wikipedia.org/wiki/Gnossiennes, imslp.org/wiki/Gnossiennes_(Satie,_Erik).
   sleep: {
-    bpm: 48,
-    beatsPerBar: 3,
+    bpm: 54,
+    beatsPerBar: 4,
     barsPerChord: 2,
     chords: [
-      { root: 0,  type: 'min7' },
-      { root: 5,  type: 'min7' },
-      { root: -4, type: 'maj7' },
+      { root: 0, type: 'min7' },
+      { root: 7, type: 'min7' },
+      { root: 0, type: 'min7' },
+      { root: 3, type: 'maj7' },
     ],
     melodyEveryBars: 4,
   },
